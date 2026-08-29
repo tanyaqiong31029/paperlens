@@ -1,0 +1,36 @@
+@import "tailwindcss";
+
+:root {
+  color-scheme: light;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB",
+    "Microsoft YaHei", "Segoe UI", Roboto, sans-serif;
+  background-color: #f6f8fb;
+  color: #1e293b;
+}
+
+/* 报告全文标红视图中的标记 */
+.mark-dup {
+  background: #fecaca;
+  color: #b91c1c;
+  border-radius: 2px;
+  padding: 0 1px;
+}
+.mark-aigc {
+  background: #ede9fe;
+  border-bottom: 2px dotted #8b5cf6;
+  padding: 0 1px;
+}
+.mark-web {
+  background: #fed7aa;
+  color: #c2410c;
+  border-radius: 2px;
+  padding: 0 1px;
+}
+
+/* 细滚动条 */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #94a3b8; }

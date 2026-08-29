@@ -1,0 +1,15 @@
+# --- 运行时数据（检测历史 / 已采集语料 / 引擎密钥），勿提交 ---
+backend/data/
+
+# --- 构建产物 ---
+frontend/dist/
+frontend/node_modules/
+backend/__pycache__/
+backend/**/__pycache__/
+*.pyc
+
+# --- 日志与临时文件 ---
+*.log
+nohup.out
+.DS_Store
+tmp/
