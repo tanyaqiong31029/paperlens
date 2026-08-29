@@ -60,6 +60,13 @@ def detect_all(text: str, lang: str) -> list[dict]:
             "未安装 transformers（pip install 'transformers>=4.40' torch），安装后自动加载 HC3 微调检测器",
         ))
 
+    # 1.6) 实验性引擎（当前不可真实调用，如实标注，不发送任何数据）
+    for key, meta in config.EXPERIMENTAL_ENGINES.items():
+        results.append(_outcome(
+            key, meta["name"], meta["region"], "experimental", None,
+            meta["desc"] + "。本次未向任何第三方发送数据。",
+        ))
+
     # 2) 可配置的真实外部引擎
     for key, meta in config.EXTERNAL_ENGINES.items():
         conf = keys.get(key)
@@ -72,8 +79,6 @@ def detect_all(text: str, lang: str) -> list[dict]:
         try:
             if meta["adapter"] == "gptzero":
                 rate, note = _call_gptzero(text, conf["api_key"])
-            elif meta["adapter"] == "copyleaks":
-                rate, note = _call_copyleaks(text, conf["api_key"])
             else:
                 rate, note = None, "适配器未实现"
             results.append(_outcome(key, meta["name"], meta["region"], "ok", rate, note))
@@ -109,23 +114,6 @@ def _call_gptzero(text: str, api_key: str) -> tuple[float, str]:
     return round(prob * 100, 1), f"完全 AI 生成概率 {prob:.2%}"
 
 
-def _call_copyleaks(text: str, api_key: str) -> tuple[float, str]:
-    # CopyLeaks 需要两步（获取 token + 异步扫描），此处同步轮询简化实现；
-    # 无 key 时不会走到这里。接口地址以官方文档为准，可按账号区域调整。
-    auth = _post_json(
-        "https://id.copyleaks.com/v3/account/login/api",
-        {"email": "", "key": api_key}, {},  # 实际需填邮箱+key，占位说明
-    )
-    token = auth.get("access_token", "")
-    scan = _post_json(
-        "https://api.copyleaks.com/v2/writer-detector/submit/sync",
-        {"text": text[:20000]},
-        {"Authorization": f"Bearer {token}"},
-    )
-    rate = scan.get("score", {}).get("ai", 0)
-    return round(rate * 100, 1), "CopyLeaks AI 检测结果"
-
-
 def list_engines() -> list[dict]:
     keys = db.get_engine_keys()
     out = [{
@@ -145,6 +133,9 @@ def list_engines() -> list[dict]:
             "configured": bool(conf.get("api_key")),
             "enabled": bool(conf.get("enabled")),
         })
+    for key, meta in config.EXPERIMENTAL_ENGINES.items():
+        out.append({**meta, "key": key, "type": "api", "experimental": True,
+                    "configured": False, "enabled": False})
     for meta in config.INFO_ONLY_ENGINES:
         out.append({**meta, "key": meta["key"], "type": "manual",
                     "configured": False, "enabled": False})

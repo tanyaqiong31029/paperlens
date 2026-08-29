@@ -1,6 +1,6 @@
 """检测任务编排：查重 + AIGC 多引擎，后台线程执行，DB 存状态与报告。"""
 import json
-import threading
+from concurrent.futures import ThreadPoolExecutor
 import uuid
 
 from .. import db
@@ -8,12 +8,14 @@ from . import plagiarism, segmenter
 from .aigc import engines as aigc_engines
 from .corpus import CORPUS
 
+# 有界工作线程池：并发检测数固定，避免每个请求各起一个线程
+EXECUTOR = ThreadPoolExecutor(max_workers=2, thread_name_prefix="paperlens-check")
+
 
 def submit(title: str, text: str, options: dict) -> str:
     check_id = uuid.uuid4().hex[:12]
     db.create_check(check_id, title, options)
-    t = threading.Thread(target=_run, args=(check_id, text, options), daemon=True)
-    t.start()
+    EXECUTOR.submit(_run, check_id, text, options)
     return check_id
 
 

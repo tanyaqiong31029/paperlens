@@ -1,5 +1,6 @@
-fastapi>=0.110
-uvicorn[standard]>=0.29
-python-multipart>=0.0.9
-python-docx>=1.1.0
-pypdf>=4.0.0
+# 版本已锁定（可复现安装）；升级前先跑 backend/tests
+fastapi==0.141.1
+uvicorn==0.52.4
+python-multipart==0.0.32
+python-docx==1.2.0
+pypdf==6.16.2

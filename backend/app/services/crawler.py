@@ -240,14 +240,30 @@ def sources_info() -> list[dict]:
 
 # ---------------- 任务管理 ----------------
 
+MAX_CONCURRENT_CRAWLS = 2          # 并发采集任务上限（有界，避免线程无限制增长）
+_active_jobs = 0
+_jobs_lock = threading.Lock()
+
+
 def start_job(source: str, query: str, target: int) -> str:
+    global _active_jobs
     if source not in SOURCES:
         raise ValueError(f"未知数据源：{source}")
+    with _jobs_lock:
+        if _active_jobs >= MAX_CONCURRENT_CRAWLS:
+            raise RuntimeError(f"已有 {MAX_CONCURRENT_CRAWLS} 个采集任务在运行，请等待完成或先停止")
+        _active_jobs += 1
     target = max(20, min(int(target), SOURCES[source]["max_target"]))
     job_id = uuid.uuid4().hex[:10]
     db.create_job(job_id, source, query.strip(), target)
     threading.Thread(target=_run_job, args=(job_id,), daemon=True).start()
     return job_id
+
+
+def _release_job() -> None:
+    global _active_jobs
+    with _jobs_lock:
+        _active_jobs = max(0, _active_jobs - 1)
 
 
 def _run_job(job_id: str) -> None:
@@ -292,3 +308,5 @@ def _run_job(job_id: str) -> None:
     except Exception as e:  # noqa: BLE001
         db.update_job(job_id, status="error", fetched=fetched, added=added,
                       message=f"{e}；errors: {'；'.join(errors[-2:])}"[:400])
+    finally:
+        _release_job()

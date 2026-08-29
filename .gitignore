@@ -13,3 +13,6 @@ backend/**/__pycache__/
 nohup.out
 .DS_Store
 tmp/
+*.tsbuildinfo
+marketing/
+backend/evals/data/

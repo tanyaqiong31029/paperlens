@@ -18,7 +18,11 @@
 ---
 
 PaperLens brings the workflow of commercial platforms (CNKI / PaperPass / Turnitin / GPTZero)
-onto your own machine. Your documents never leave your server.
+onto your own machine. In the default local mode your document text never leaves the machine;
+if you explicitly enable external engines (e.g. GPTZero) or web-wide verification, the
+corresponding text or short query fragments are sent to those providers — the submit page
+shows exactly who receives what before you run a check. See [README.md](README.md) for the
+full data-flow table.
 
 ## Features
 

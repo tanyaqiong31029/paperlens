@@ -11,6 +11,7 @@
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg" alt="license"/></a>
+  <a href="https://github.com/tanyaqiong31029/paperlens/actions/workflows/ci.yml"><img src="https://github.com/tanyaqiong31029/paperlens/actions/workflows/ci.yml/badge.svg" alt="CI"/></a>
   <img src="https://img.shields.io/badge/python-3.10%2B-blue.svg" alt="python"/>
   <img src="https://img.shields.io/badge/react-18-61dafb.svg" alt="react"/>
   <img src="https://img.shields.io/badge/%E4%B8%AD%E8%8B%B1%E5%8F%8C%E8%AF%AD-%E6%94%AF%E6%8C%81-orange.svg" alt="zh/en"/>
@@ -33,7 +34,7 @@
 | 🌐 **联网全网核查** | 可疑句多源检索：OpenAlex / arXiv / Europe PMC 学术库直查（自带摘要免抓页面）+ Bing / DuckDuckGo 兜底，命中标注来源链接与网页原文摘录，单独输出联网重复率 |
 | 🕷️ **OA 语料采集** | 内置爬虫从 arXiv / OpenAlex（含中文 OA）/ DOAJ / Europe PMC 四个官方数据源增量扩库，任务进度可视 |
 | 🤖 **AIGC 检测（v2 集成引擎）** | 六维统计指纹 + 语料库 n-gram LM 平滑度信号（句间突发性 / token 困惑波动），全文级 + 逐句 AI 疑似度 + 特征雷达 |
-| ⚖️ **多引擎对比** | 本地引擎实测 + GPTZero / CopyLeaks（填 Key 真实调用）+ transformers 模型插件（HC3 检测器 / 自训模型）+ 知网 / 万方 / 维普 / 朱雀 / Turnitin（无公开 API，如实标注） |
+| ⚖️ **多引擎对比** | 本地引擎实测 + GPTZero（填 Key 真实调用）+ transformers 模型插件（HC3 检测器 / 自训模型）+ CopyLeaks（实验性，暂不可调用）+ 知网 / 万方 / 维普 / 朱雀 / Turnitin（无公开 API，如实标注） |
 | ✂️ **降重 · 降AIGC** | 定位命中句与 AI 疑似句，规则改写（同义替换 / 套话改写 / 连接词稀释 / 长句切分），改完自动复测输出前后对比 |
 | 📊 **知网式报告** | 全文标红（本地重复红 / 联网命中橙 / AI 高疑似紫）、片段左右对照、独立 HTML 报告导出 |
 
@@ -59,8 +60,8 @@
 ## 快速开始
 
 ```bash
-bash start.sh          # 默认 http://localhost:8765（自动安装依赖 → 构建前端 → 启动）
-bash start.sh 9000     # 自定义端口
+bash setup.sh          # 安装后端依赖 + npm ci + 构建前端（只需一次）
+bash start.sh          # 默认 http://127.0.0.1:8765 —— 仅本机可访问
 ```
 
 - 后端：Python 3.10+（FastAPI + SQLite，无重型依赖）
@@ -72,6 +73,16 @@ bash start.sh 9000     # 自定义端口
 cd backend && python3 -m uvicorn app.main:app --port 8765
 cd frontend && npm install && npm run dev    # 5173 端口，已配置 /api 代理
 ```
+
+### 安全模型（默认最小暴露）
+
+- 默认绑定 **127.0.0.1**，仅本机可访问——适合共享 Wi-Fi、校园网、内网环境直接使用；
+- 如确需局域网开放：`PAPERLENS_ADMIN_TOKEN=$(openssl rand -hex 16) HOST=0.0.0.0 bash start.sh 8765 0.0.0.0`，
+  非回环地址启动**强制要求管理员令牌**，设置后 `/api` 下除健康/统计/引擎列表外的接口
+  （含报告读取、上传、删除、爬虫、Key 配置）均要求 `X-Admin-Token` 请求头；
+- CORS 默认**不启用**（同源部署天然可用），跨域需求需显式设置 `PAPERLENS_ALLOW_ORIGINS`；
+- 请求体在读取正文前校验大小上限（默认 40MB），检测任务使用有界线程池（并发 2），
+  采集任务并发上限 2，防止资源被单个客户端占满。
 
 首次启动建议到「语料采集」页跑一轮采集（arXiv / OpenAlex 各 200 篇约 2 分钟），
 把对比库从内置演示语料扩到真实 OA 论文；本地 AIGC 引擎的 n-gram LM 也会随语料自动重建。
@@ -107,18 +118,20 @@ cd frontend && npm install && npm run dev    # 5173 端口，已配置 /api 代�
 实测出现**域内反转**——OA 人类论文的 ppl 反而低于 AI 文本（领域自适应效应），
 因此最终版本剔除了绝对 ppl，只保留"波动形状"类平滑度信号。
 
-对照样本实测梯度（内置引擎，单次运行）：
+**固定评测集回归结果**（`backend/evals/aigc_eval.json`，24 条自建中英样本，
+运行 `python scripts/eval_aigc.py` 可复现）：
 
-| 文本类型 | v1 六特征版 | v2 集成版 |
-|---|---|---|
-| 强 AI 风格（中文） | 85.7% | 85.9% |
-| 强 AI 风格（英文） | — | 95.2% |
-| 书面化论文语料摘录 | 40.7% | ≈40% |
-| 口语化人类随手写 | 26.1% | 32.1% |
+| 子集 | AUROC | 最佳F1（阈值） | FPR@45 | FPR@70 |
+|---|---|---|---|---|
+| 全部 | 1.000 | 1.000（50） | 0.25 | 0.00 |
+| 中文 | 1.000 | 1.000（50） | 0.33 | 0.00 |
+| 英文 | 1.000 | 1.000（50） | 0.17 | 0.00 |
 
-**诚实声明**：统计启发式对"深度改写过的 AI 文本"判别力有限，报告页将其定位为
-初筛自查工具，并内置 GPTZero / CopyLeaks / transformers 模型的多引擎交叉验证；
-任何单一引擎的 AIGC 率都不应作为学术不端的定论依据。
+**诚实声明**：评测集为自建小样本且与内置语料同源，AUROC=1.000 只说明"本引擎在这组
+回归样本上可分"，**不能外推为对真实混合文本的检测精度**。FPR@45=0.25 也如实说明：
+45 分阈值会把约四分之一的书面化人类文本标为"疑似"。统计启发式对深度改写的 AI 文本
+判别力有限，报告页将其定位为初筛自查工具，并内置 GPTZero / transformers 模型的
+多引擎交叉验证；任何单一引擎的 AIGC 率都不应作为学术不端的定论依据。
 
 ## 查重算法
 
@@ -182,12 +195,37 @@ GET  /api/crawl/sources              OA 数据源       POST /api/crawl/jobs 启
 GET  /api/engines                    引擎清单        POST /api/engines/{key}/config
 ```
 
+## 隐私与数据流向
+
+**默认本地模式（本地查重 + 本地集成引擎 + transformers 插件）：正文不离开这台设备。**
+
+启用以下功能后，会有相应数据发送给第三方，提交页会按启用情况显示提示：
+
+| 功能 | 发送内容 | 接收方 |
+|---|---|---|
+| GPTZero 引擎（需自行填 Key） | 正文前缀，≤30,000 字符 | GPTZero（api.gptzero.me） |
+| 联网全网核查 | 可疑句的归一化检索片段（中文 ≤16 字 / 英文 ≤10 词） | OpenAlex / arXiv / Europe PMC、Bing / DuckDuckGo |
+| CopyLeaks（实验性） | 暂不可调用，不发送任何数据 | — |
+
+不启用上述功能时不会产生任何对外请求（OA 语料采集除外，抓取的是公开文献元数据，
+与用户论文无关）。
+
 ## 数据与合规
 
 - 内置 `seed_corpus/` 为**自撰演示语料**（无版权风险）；真实对比库通过「语料采集」
   从官方 OA API 拉取（标题+摘要+来源链接，礼貌抓取）或自建库上传；
 - `backend/data/`（检测历史、已采集语料、API Key）不入库、不出本机；
-- API Key 保存在本机 SQLite，仅供本机/内网部署；**请勿将未加鉴权的服务直接暴露公网**。
+- API Key 保存在本机 SQLite；默认仅绑定 127.0.0.1，**局域网/公网开放必须配置管理员
+  令牌**（见「安全模型」），并自行承担访问控制责任。
+
+## 工程质量
+
+- 后端：`pytest tests/`（25 个用例：分句/指纹/查重口径/参考文献剥离/docx 解析/
+  报告导出/改写/API 冒烟/管理令牌/请求体上限），`python scripts/eval_aigc.py`（AIGC 回归评测）
+- 前端：`npm run build`（TypeScript 严格模式），依赖审计随 CI 执行
+- CI：`.github/workflows/ci.yml` —— 后端测试 + 前端构建 + `npm audit --audit-level=high`
+- 后端依赖已在 `requirements.txt` 锁定精确版本；前端由 `package-lock.json` 锁定，
+  安装统一走 `npm ci`
 
 ## 免责声明
 

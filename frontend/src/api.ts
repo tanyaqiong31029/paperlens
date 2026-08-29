@@ -81,7 +81,7 @@ export interface AigcEngine {
   key: string
   name: string
   region: string
-  status: 'ok' | 'not_configured' | 'error' | 'manual'
+  status: 'ok' | 'not_configured' | 'error' | 'manual' | 'experimental'
   rate: number | null
   note: string
   sentence_scores: AigcSentence[]
@@ -138,6 +138,7 @@ export interface EngineInfo {
   type: 'api' | 'manual' | 'search' | 'model'
   configured: boolean
   enabled: boolean
+  experimental?: boolean
 }
 
 export interface CrawlSource {

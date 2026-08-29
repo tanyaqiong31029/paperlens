@@ -1,15 +1,28 @@
-"""全局配置：路径、检测参数、AIGC 引擎清单。"""
+"""全局配置：路径、检测参数、AIGC 引擎清单。
+
+安全相关（均可被环境变量覆盖）：
+- PAPERLENS_DATA_DIR   数据目录（默认 backend/data）
+- PAPERLENS_ADMIN_TOKEN  设置后，/api 下除 health/stats/engines 外的接口
+  都要求请求头 X-Admin-Token 匹配；start.sh 仅在绑定非回环地址时要求配置
+- PAPERLENS_ALLOW_ORIGINS  逗号分隔的 CORS 白名单；默认不启用 CORS
+  （同源部署天然可用），即默认只允许自身地址
+"""
+import os
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent   # backend/
-DATA_DIR = BASE_DIR / "data"
+DATA_DIR = Path(os.environ.get("PAPERLENS_DATA_DIR") or (BASE_DIR / "data"))
 DB_PATH = DATA_DIR / "app.db"
 UPLOAD_DIR = DATA_DIR / "uploads"
 EXPORT_DIR = DATA_DIR / "exports"
 
 APP_NAME = "PaperLens 论文检测中心"
-APP_VERSION = "1.0.0"
+APP_VERSION = "1.1.0"
 MAX_UPLOAD_MB = 15
+MAX_BODY_BYTES = 40 * 1024 * 1024      # 请求体上限（含 multipart 开销），读取正文前先查
+MAX_TEXT_CHARS = 2_000_000             # 粘贴正文上限（字符）
+
+ADMIN_TOKEN = os.environ.get("PAPERLENS_ADMIN_TOKEN", "").strip()
 
 # ---------- 查重参数 ----------
 # 中文按"字"为最小单位，英文按"词"。指纹 shingle 长度参考开源
@@ -29,18 +42,22 @@ AIGC_MID = 45    # >= 45 判为"疑似"
 # ---------- 外部 AIGC 引擎 ----------
 # 有公开 API、可自行填 key 直连的引擎；其余主流产品（知网/维普/万方/朱雀/
 # Turnitin）为机构接口，无公开 API，仅在报告中列出作为对接说明。
+# 注意：调用外部引擎会把正文（或其前缀）发送给对应服务商，提交页会如实提示。
 EXTERNAL_ENGINES = {
     "gptzero": {
         "name": "GPTZero",
         "region": "国际",
-        "desc": "国际主流 AI 检测服务，支持逐句 AI 概率",
+        "desc": "国际主流 AI 检测服务，支持逐句 AI 概率（调用时发送正文前 ≤30,000 字符）",
         "adapter": "gptzero",
     },
+}
+# 实验性 / 未完成：CopyLeaks 需要 邮箱 + API Key 双凭据且接口有异步审核流程，
+# 当前仅占位，不在检测中真实调用。
+EXPERIMENTAL_ENGINES = {
     "copyleaks": {
         "name": "CopyLeaks AI Detector",
         "region": "国际",
-        "desc": "支持 30+ 语言的企业级 AI 内容检测",
-        "adapter": "copyleaks",
+        "desc": "实验性：需 邮箱+Key 双凭据接入，暂不可用；正式支持后将明确标注发送范围",
     },
 }
 INFO_ONLY_ENGINES = [

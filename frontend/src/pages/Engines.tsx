@@ -94,6 +94,11 @@ export AIGC_MODEL_EN=Hello-SimpleAI/chatgpt-detector-roberta`}</pre>
                 <div className="flex items-center gap-2 flex-wrap">
                   <h3 className="font-semibold text-slate-800">{e.name}</h3>
                   <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-500 text-xs">{e.region}</span>
+                  {e.experimental && (
+                    <span className="px-2 py-0.5 rounded-md bg-amber-100 text-amber-700 text-xs font-medium">
+                      实验性 · 暂不可用
+                    </span>
+                  )}
                   {e.enabled ? (
                     <span className="flex items-center gap-1 text-xs text-emerald-600 font-medium">
                       <CheckCircle2 size={13} /> 已启用
@@ -105,6 +110,12 @@ export AIGC_MODEL_EN=Hello-SimpleAI/chatgpt-detector-roberta`}</pre>
                   )}
                 </div>
                 <p className="mt-1.5 text-sm text-slate-500">{e.desc}</p>
+                {e.experimental ? (
+                  <p className="mt-3 text-xs text-amber-600">
+                    该引擎需要 邮箱 + API Key 双凭据与异步扫描流程，正式支持前不会真实调用，
+                    也不会向其发送任何数据。
+                  </p>
+                ) : (
                 <div className="mt-3 flex flex-col sm:flex-row gap-2">
                   <input
                     type="password"
@@ -128,9 +139,12 @@ export AIGC_MODEL_EN=Hello-SimpleAI/chatgpt-detector-roberta`}</pre>
                     </button>
                   )}
                 </div>
-                <p className="mt-2 text-xs text-slate-400">
-                  Key 仅保存在本机服务端数据库。调用结果取决于服务官方接口的可用性与额度。
-                </p>
+                )}
+                {!e.experimental && (
+                  <p className="mt-2 text-xs text-slate-400">
+                    Key 仅保存在本机服务端数据库。注意：启用后检测会把正文前缀（≤3 万字符）发送给该服务商。
+                  </p>
+                )}
               </div>
             </div>
           </div>

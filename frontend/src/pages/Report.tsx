@@ -162,6 +162,7 @@ export default function Report() {
                     <div className="flex-1 text-xs text-slate-400">
                       {e.status === 'not_configured' ? '未配置 API Key'
                         : e.status === 'error' ? `调用失败：${e.note}`
+                        : e.status === 'experimental' ? '实验性 · 暂不可真实调用（未发送数据）'
                         : '需机构接口对接，无公开 API'}
                     </div>
                     <span className="w-12 text-right text-xs text-slate-300">—</span>

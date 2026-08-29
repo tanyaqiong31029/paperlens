@@ -1,7 +1,7 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { UploadCloud, ClipboardType, Loader2, FileUp, Info, Globe } from 'lucide-react'
-import { api } from '../api'
+import { UploadCloud, ClipboardType, Loader2, FileUp, Info, Globe, ShieldCheck, Send } from 'lucide-react'
+import { api, EngineInfo } from '../api'
 
 type InputMode = 'file' | 'text'
 
@@ -18,7 +18,15 @@ export default function Submit() {
   const [dragOver, setDragOver] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [engines, setEngines] = useState<EngineInfo[]>([])
   const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    api.listEngines().then(setEngines).catch(() => {})
+  }, [])
+
+  // 数据流向提示：外部 AIGC 引擎启用时正文会出本机；联网核查会发送检索片段
+  const externalEnabled = engines.filter(e => e.type === 'api' && e.enabled && !e.experimental)
 
   const pickFile = (f: File | null | undefined) => {
     if (!f) return
@@ -192,6 +200,37 @@ export default function Submit() {
             未配置检索 API Key 时使用 Bing / DuckDuckGo 网页检索兜底，受网络环境影响可能失败；
             可在「引擎配置」页填入 Bing API / SerpAPI Key 提高稳定性。
           </p>
+        </div>
+
+        {/* 数据流向提示 */}
+        <div className="rounded-xl border p-4 text-xs leading-relaxed">
+          <div className="flex items-start gap-2 text-emerald-700">
+            <ShieldCheck size={15} className="shrink-0 mt-0.5" />
+            <p>
+              <b>默认本地模式</b>：仅使用本地比对库与本地检测引擎，正文不会离开这台设备。
+            </p>
+          </div>
+          {(externalEnabled.length > 0 || webCheck) && (
+            <div className="mt-2.5 flex items-start gap-2 text-amber-700">
+              <Send size={15} className="shrink-0 mt-0.5" />
+              <p>
+                <b>本次检测将向以下第三方发送数据：</b>
+                {externalEnabled.length > 0 && (
+                  <span>
+                    {externalEnabled.map(e => e.name).join('、')}
+                    （发送正文前缀，≤30,000 字符）；{' '}
+                  </span>
+                )}
+                {webCheck && (
+                  <span>
+                    联网核查（向 OpenAlex / arXiv / Europe PMC 与搜索引擎发送可疑句的
+                    归一化检索片段，中文 ≤16 字、英文 ≤10 词）
+                  </span>
+                )}
+                。不需要时可在「引擎配置」页停用对应引擎、或取消勾选联网核查。
+              </p>
+            </div>
+          )}
         </div>
 
         {error && (

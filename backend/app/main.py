@@ -1,15 +1,16 @@
 """PaperLens 论文检测中心 · FastAPI 后端入口。
 
-生产模式下托管 frontend/dist（React 构建产物），单端口部署；
-开发模式可 `uvicorn app.main:app --reload` 配合 Vite dev server（5173）。
+安全模型（默认最小暴露）：
+- 启动脚本默认绑定 127.0.0.1；绑定非回环地址须显式传参，且要求设置
+  PAPERLENS_ADMIN_TOKEN（/api 下的写接口与报告读取随后要求 X-Admin-Token）；
+- CORS 默认不启用（同源部署天然可用）；如需跨域，设 PAPERLENS_ALLOW_ORIGINS。
 """
 import json
 import os
-import uuid
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -20,14 +21,9 @@ from .services.aigc import engines as aigc_engines
 from .services.corpus import CORPUS
 from .services.exporter import export_html
 
-app = FastAPI(title=config.APP_NAME, version=config.APP_VERSION)
-app.add_middleware(
-    CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"],
-)
 
-
-@app.on_event("startup")
-def startup() -> None:
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
     db.init_db()
     _seed_corpus_if_empty()
     CORPUS.rebuild()
@@ -35,6 +31,31 @@ def startup() -> None:
     import threading
     from .services import ngram_lm
     threading.Thread(target=ngram_lm.rebuild_lm, daemon=True).start()
+    yield
+
+
+app = FastAPI(title=config.APP_NAME, version=config.APP_VERSION, lifespan=lifespan)
+
+# CORS：默认关闭（同源部署不需要）。跨域需求时用环境变量显式开白名单。
+_allow_origins = [o.strip() for o in os.environ.get("PAPERLENS_ALLOW_ORIGINS", "").split(",") if o.strip()]
+if _allow_origins:
+    from fastapi.middleware.cors import CORSMiddleware
+    app.add_middleware(
+        CORSMiddleware, allow_origins=_allow_origins,
+        allow_methods=["*"], allow_headers=["*"],
+    )
+
+
+@app.middleware("http")
+async def admin_guard(request: Request, call_next):
+    """设置 PAPERLENS_ADMIN_TOKEN 后，除健康/统计/引擎列表外全部要求令牌。"""
+    if config.ADMIN_TOKEN:
+        p = request.url.path
+        if p.startswith("/api") and p not in ("/api/health", "/api/stats", "/api/engines"):
+            token = request.headers.get("x-admin-token") or request.query_params.get("token")
+            if token != config.ADMIN_TOKEN:
+                return JSONResponse({"detail": "需要管理员令牌（X-Admin-Token）"}, status_code=401)
+    return await call_next(request)
 
 
 def _seed_corpus_if_empty() -> None:
@@ -67,6 +88,7 @@ def stats():
 # ---------------- 检测 ----------------
 @app.post("/api/checks")
 async def create_check(
+    request: Request,
     file: UploadFile | None = File(None),
     text: str | None = Form(None),
     title: str = Form(""),
@@ -75,6 +97,11 @@ async def create_check(
     web_check: bool = Form(False),       # 联网全网核查
     web_check_count: int = Form(10),
 ):
+    # 读取正文之前先校验请求体大小，避免超大请求占用内存
+    cl = request.headers.get("content-length")
+    if cl and cl.isdigit() and int(cl) > config.MAX_BODY_BYTES:
+        raise HTTPException(413, f"请求体超过 {config.MAX_BODY_BYTES // (1024*1024)}MB 上限")
+
     content = ""
     name = ""
     if file is not None and file.filename:
@@ -86,6 +113,8 @@ async def create_check(
             raise HTTPException(400, str(e))
     elif text:
         content = text
+    if len(content) > config.MAX_TEXT_CHARS:
+        raise HTTPException(413, f"正文超过 {config.MAX_TEXT_CHARS} 字符上限")
     if len(content.strip()) < 50:
         raise HTTPException(400, "正文过短（至少 50 字符），请检查文件内容或直接粘贴文本")
 
@@ -205,6 +234,8 @@ async def start_crawl(request: Request):
         )
     except ValueError as e:
         raise HTTPException(400, str(e))
+    except RuntimeError as e:
+        raise HTTPException(429, str(e))
     return {"job_id": job_id}
 
 
