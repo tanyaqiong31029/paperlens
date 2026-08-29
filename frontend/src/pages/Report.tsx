@@ -5,7 +5,7 @@ import {
   Copy, FileText, Gauge, Globe, ExternalLink,
 } from 'lucide-react'
 import {
-  api, CheckDetail, rateColor, rateLabel, aigcColor, FragSource, AigcSentence,
+  api, apiFetch, CheckDetail, rateColor, rateLabel, aigcColor, FragSource, AigcSentence,
 } from '../api'
 import RingGauge from '../components/RingGauge'
 import Radar from '../components/Radar'
@@ -32,6 +32,19 @@ export default function Report() {
       setError(e instanceof Error ? e.message : '加载失败')
     })
   }, [id])
+
+  // 导出走 apiFetch（令牌模式下才能通过网关），成功后以 blob 下载
+  const exportReport = async () => {
+    if (!id) return
+    const res = await apiFetch(`/api/checks/${id}/export`)
+    if (!res.ok) return
+    const blob = await res.blob()
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    a.download = `report_${id}.html`
+    a.click()
+    URL.revokeObjectURL(a.href)
+  }
 
   useEffect(() => {
     load()
@@ -86,12 +99,12 @@ export default function Report() {
             报告单号 {data.id} ｜ {data.created_at} ｜ 全文 {data.word_count} 字符 ｜ 语言 {data.language.toUpperCase()}
           </p>
         </div>
-        <a
-          href={`/api/checks/${data.id}/export`}
+        <button
+          onClick={exportReport}
           className="shrink-0 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-800 text-white text-sm hover:bg-slate-700 transition-colors"
         >
           <Download size={15} /> 导出报告
-        </a>
+        </button>
       </div>
 
       {/* 核心指标卡 */}

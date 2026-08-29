@@ -19,10 +19,10 @@ EXPORT_DIR = DATA_DIR / "exports"
 APP_NAME = "PaperLens 论文检测中心"
 APP_VERSION = "1.1.0"
 MAX_UPLOAD_MB = 15
-MAX_BODY_BYTES = 40 * 1024 * 1024      # 请求体上限（含 multipart 开销），读取正文前先查
 MAX_TEXT_CHARS = 2_000_000             # 粘贴正文上限（字符）
 
 ADMIN_TOKEN = os.environ.get("PAPERLENS_ADMIN_TOKEN", "").strip()
+MAX_BODY_BYTES = int(os.environ.get("PAPERLENS_MAX_BODY_BYTES", str(40 * 1024 * 1024)))
 
 # ---------- 查重参数 ----------
 # 中文按"字"为最小单位，英文按"词"。指纹 shingle 长度参考开源

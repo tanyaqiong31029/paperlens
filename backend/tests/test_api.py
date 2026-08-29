@@ -61,11 +61,76 @@ def test_too_short_text_rejected(client):
     assert client.post("/api/checks", data={"text": "太短"}).status_code == 400
 
 
-def test_body_size_limit(client):
-    # 伪造超大 content-length，应在读取正文前被拒
-    r = client.post("/api/checks", data={"text": "正常内容" * 20},
-                    headers={"content-length": str(config.MAX_BODY_BYTES + 1)})
+def test_body_limit_middleware_unit():
+    """中间件单测：小上限下超限请求在读满前被 413 拒绝（asyncio.run 驱动）。"""
+    import asyncio
+    from app.main import BodySizeLimitMiddleware
+
+    async def run():
+        mw = BodySizeLimitMiddleware(None, max_bytes=10)
+        scope = {"type": "http", "method": "POST", "path": "/api/checks"}
+        chunks = [b"a" * 8, b"b" * 8]  # 分块到达，累计 16 > 10
+
+        async def receive():
+            if chunks:
+                return {"type": "http.request", "body": chunks.pop(0), "more_body": bool(chunks)}
+            return {"type": "http.disconnect"}
+
+        sent = []
+
+        async def send(msg):
+            sent.append(msg)
+
+        await mw(scope, receive, send)
+        return sent
+
+    sent = asyncio.run(run())
+    assert sent[0]["status"] == 413
+
+
+def test_body_limit_middleware_api(client, monkeypatch):
+    """API 级：覆盖所有上传/JSON 接口（以文档库上传为例），无 Content-Length 也可拦截。"""
+    from app.main import app as fastapi_app
+    mw = next(m for m in fastapi_app.user_middleware)  # 确认中间件已挂载
+    big = "x" * (config.MAX_BODY_BYTES + 10)
+    r = client.post("/api/library/documents", data={"text": big, "title": "超大"})
     assert r.status_code == 413
+
+
+def test_e2e_admin_token_flow(client, monkeypatch):
+    """模拟前端完整流程：无令牌 401 → 弹窗输入令牌 → 提交检测 → 读取报告 → 导出。
+
+    对应前端行为：apiFetch 收到 401 广播 TokenDialog，用户输入后令牌写入
+    sessionStorage，后续请求统一携带 X-Admin-Token 请求头（不再支持 query 传递）。
+    """
+    monkeypatch.setattr(config, "ADMIN_TOKEN", "tok-123")
+    text = (
+        "综上所述，社交媒体营销已经成为企业数字化转型的重要组成部分。"
+        "研究表明，内容质量与互动频率对品牌传播效果具有重要影响，值得深入探讨。"
+    )
+    H = {"X-Admin-Token": "tok-123"}
+
+    # 1) 未持令牌：提交与读报告都 401
+    assert client.post("/api/checks", data={"text": text}).status_code == 401
+    # 2) query-string 令牌不再被接受（防止令牌进入历史/代理日志/Referer）
+    r = client.post("/api/checks", data={"text": text, "token": "tok-123"})
+    assert r.status_code == 401
+    # 3) 用户输入令牌后：提交检测
+    cid = client.post("/api/checks", data={"text": text, "title": "令牌E2E"},
+                      headers=H).json()["check_id"]
+    # 4) 读取报告直至完成
+    for _ in range(60):
+        data = client.get(f"/api/checks/{cid}", headers=H).json()
+        if data["status"] == "done":
+            break
+        time.sleep(0.5)
+    assert data["status"] == "done"
+    assert data["report"]["aigc"]["local"]["rate"] is not None
+    # 5) 导出报告（对应前端 blob 下载）
+    exp = client.get(f"/api/checks/{cid}/export", headers=H)
+    assert exp.status_code == 200 and "text/html" in exp.headers["content-type"]
+    # 6) 无令牌读报告仍 401
+    assert client.get(f"/api/checks/{cid}").status_code == 401
 
 
 def test_engines_list_marks_experimental(client):

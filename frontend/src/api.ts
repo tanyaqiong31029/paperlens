@@ -170,6 +170,32 @@ export interface Stats {
   engines: number
 }
 
+// ---------- 管理员令牌（仅存 sessionStorage，关闭标签页即清除） ----------
+const TOKEN_KEY = 'paperlens_admin_token'
+
+export function getAdminToken(): string {
+  return sessionStorage.getItem(TOKEN_KEY) ?? ''
+}
+export function setAdminToken(t: string): void {
+  sessionStorage.setItem(TOKEN_KEY, t.trim())
+}
+export function clearAdminToken(): void {
+  sessionStorage.removeItem(TOKEN_KEY)
+}
+
+// 全部 API 请求统一走 apiFetch：自动附带 X-Admin-Token；401 时清除令牌并广播
+export async function apiFetch(input: string, init?: RequestInit): Promise<Response> {
+  const headers = new Headers(init?.headers)
+  const t = getAdminToken()
+  if (t) headers.set('X-Admin-Token', t)
+  const res = await fetch(input, { ...init, headers })
+  if (res.status === 401) {
+    clearAdminToken()
+    window.dispatchEvent(new CustomEvent('paperlens:unauthorized'))
+  }
+  return res
+}
+
 async function handle<T>(res: Response): Promise<T> {
   if (!res.ok) {
     let msg = `请求失败 (${res.status})`
@@ -183,7 +209,7 @@ async function handle<T>(res: Response): Promise<T> {
 }
 
 export const api = {
-  stats: () => fetch('/api/stats').then(handle<Stats>),
+  stats: () => apiFetch('/api/stats').then(handle<Stats>),
   createCheckByFile: (file: File, opts: { title: string; mode: string; stripReferences: boolean; webCheck?: boolean; webCheckCount?: number }) => {
     const fd = new FormData()
     fd.append('file', file)
@@ -192,7 +218,7 @@ export const api = {
     fd.append('strip_references', String(opts.stripReferences))
     fd.append('web_check', String(opts.webCheck ?? false))
     fd.append('web_check_count', String(opts.webCheckCount ?? 10))
-    return fetch('/api/checks', { method: 'POST', body: fd }).then(handle<{ check_id: string }>)
+    return apiFetch('/api/checks', { method: 'POST', body: fd }).then(handle<{ check_id: string }>)
   },
   createCheckByText: (text: string, opts: { title: string; mode: string; stripReferences: boolean; webCheck?: boolean; webCheckCount?: number }) => {
     const fd = new FormData()
@@ -202,42 +228,42 @@ export const api = {
     fd.append('strip_references', String(opts.stripReferences))
     fd.append('web_check', String(opts.webCheck ?? false))
     fd.append('web_check_count', String(opts.webCheckCount ?? 10))
-    return fetch('/api/checks', { method: 'POST', body: fd }).then(handle<{ check_id: string }>)
+    return apiFetch('/api/checks', { method: 'POST', body: fd }).then(handle<{ check_id: string }>)
   },
-  getCheck: (id: string) => fetch(`/api/checks/${id}`).then(handle<CheckDetail>),
-  listChecks: () => fetch('/api/checks').then(handle<CheckListItem[]>),
-  deleteCheck: (id: string) => fetch(`/api/checks/${id}`, { method: 'DELETE' }).then(handle<{ ok: boolean }>),
-  listDocs: () => fetch('/api/library/documents').then(handle<LibraryDoc[]>),
+  getCheck: (id: string) => apiFetch(`/api/checks/${id}`).then(handle<CheckDetail>),
+  listChecks: () => apiFetch('/api/checks').then(handle<CheckListItem[]>),
+  deleteCheck: (id: string) => apiFetch(`/api/checks/${id}`, { method: 'DELETE' }).then(handle<{ ok: boolean }>),
+  listDocs: () => apiFetch('/api/library/documents').then(handle<LibraryDoc[]>),
   addDocByFile: (file: File, title: string) => {
     const fd = new FormData()
     fd.append('file', file)
     fd.append('title', title)
-    return fetch('/api/library/documents', { method: 'POST', body: fd }).then(handle<{ id: number }>)
+    return apiFetch('/api/library/documents', { method: 'POST', body: fd }).then(handle<{ id: number }>)
   },
   addDocByText: (text: string, title: string) => {
     const fd = new FormData()
     fd.append('text', text)
     fd.append('title', title)
-    return fetch('/api/library/documents', { method: 'POST', body: fd }).then(handle<{ id: number }>)
+    return apiFetch('/api/library/documents', { method: 'POST', body: fd }).then(handle<{ id: number }>)
   },
-  deleteDoc: (id: number) => fetch(`/api/library/documents/${id}`, { method: 'DELETE' }).then(handle<{ ok: boolean }>),
-  listEngines: () => fetch('/api/engines').then(handle<EngineInfo[]>),
+  deleteDoc: (id: number) => apiFetch(`/api/library/documents/${id}`, { method: 'DELETE' }).then(handle<{ ok: boolean }>),
+  listEngines: () => apiFetch('/api/engines').then(handle<EngineInfo[]>),
   configEngine: (key: string, apiKey: string, enabled: boolean) => {
     const fd = new FormData()
     fd.append('api_key', apiKey)
     fd.append('enabled', String(enabled))
-    return fetch(`/api/engines/${key}/config`, { method: 'POST', body: fd }).then(handle<{ ok: boolean }>)
+    return apiFetch(`/api/engines/${key}/config`, { method: 'POST', body: fd }).then(handle<{ ok: boolean }>)
   },
-  crawlSources: () => fetch('/api/crawl/sources').then(handle<CrawlSource[]>),
-  crawlJobs: () => fetch('/api/crawl/jobs').then(handle<CrawlJob[]>),
+  crawlSources: () => apiFetch('/api/crawl/sources').then(handle<CrawlSource[]>),
+  crawlJobs: () => apiFetch('/api/crawl/jobs').then(handle<CrawlJob[]>),
   startCrawl: (source: string, query: string, target: number) =>
-    fetch('/api/crawl/jobs', {
+    apiFetch('/api/crawl/jobs', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ source, query, target }),
     }).then(handle<{ job_id: string }>),
   stopCrawl: (id: string) =>
-    fetch(`/api/crawl/jobs/${id}/stop`, { method: 'POST' }).then(handle<{ ok: boolean }>),
+    apiFetch(`/api/crawl/jobs/${id}/stop`, { method: 'POST' }).then(handle<{ ok: boolean }>),
 }
 
 export function rateColor(rate: number): string {

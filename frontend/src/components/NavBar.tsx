@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom'
-import { FileSearch, History, Library, Sparkles, Home, Globe, Wand2 } from 'lucide-react'
+import { FileSearch, History, Library, Sparkles, Home, Globe, Wand2, KeyRound } from 'lucide-react'
 
 const links = [
   { to: '/', label: '首页', icon: Home },
@@ -11,7 +11,7 @@ const links = [
   { to: '/engines', label: '引擎配置', icon: Sparkles },
 ]
 
-export default function NavBar() {
+export default function NavBar({ onOpenToken }: { onOpenToken?: () => void }) {
   return (
     <header className="sticky top-0 z-40 bg-white/90 backdrop-blur border-b border-slate-200">
       <div className="max-w-6xl mx-auto px-4 h-14 flex items-center justify-between">
@@ -40,6 +40,15 @@ export default function NavBar() {
               <span className="hidden md:inline">{label}</span>
             </NavLink>
           ))}
+          {onOpenToken && (
+            <button
+              onClick={onOpenToken}
+              title="管理员令牌（局域网/令牌模式使用）"
+              className="ml-1 p-2 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
+            >
+              <KeyRound size={15} />
+            </button>
+          )}
         </nav>
       </div>
     </header>

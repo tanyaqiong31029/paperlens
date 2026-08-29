@@ -48,14 +48,66 @@ if _allow_origins:
 
 @app.middleware("http")
 async def admin_guard(request: Request, call_next):
-    """设置 PAPERLENS_ADMIN_TOKEN 后，除健康/统计/引擎列表外全部要求令牌。"""
+    """设置 PAPERLENS_ADMIN_TOKEN 后，除健康/统计/引擎列表外全部要求令牌。
+
+    令牌只接受请求头 X-Admin-Token（不提供 query-string 方式，避免令牌进入
+    浏览器历史、代理日志与 Referer）。
+    """
     if config.ADMIN_TOKEN:
         p = request.url.path
         if p.startswith("/api") and p not in ("/api/health", "/api/stats", "/api/engines"):
-            token = request.headers.get("x-admin-token") or request.query_params.get("token")
-            if token != config.ADMIN_TOKEN:
+            if request.headers.get("x-admin-token") != config.ADMIN_TOKEN:
                 return JSONResponse({"detail": "需要管理员令牌（X-Admin-Token）"}, status_code=401)
     return await call_next(request)
+
+
+class BodySizeLimitMiddleware:
+    """纯 ASGI 中间件：对 POST/PUT 的实际接收字节计数，超限即 413。
+
+    覆盖 multipart / JSON / 表单等所有请求体（含分块传输、无 Content-Length
+    的情况），限制发生在任何端点解析 body 之前。部署在 Nginx/Caddy 后时，
+    建议同时在反代层配置 client_max_body_size / request_body max_size。
+    """
+
+    def __init__(self, app, max_bytes: int):
+        self.app = app
+        self.max_bytes = max_bytes
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http" or scope.get("method") not in ("POST", "PUT"):
+            await self.app(scope, receive, send)
+            return
+        body = b""
+        while True:
+            msg = await receive()
+            if msg["type"] == "http.request":
+                body += msg.get("body", b"")
+                if len(body) > self.max_bytes:
+                    await send({
+                        "type": "http.response.start", "status": 413,
+                        "headers": [(b"content-type", b"application/json; charset=utf-8")],
+                    })
+                    await send({
+                        "type": "http.response.body",
+                        "body": f'{{"detail":"请求体超过 {self.max_bytes // (1024 * 1024)}MB 上限"}}'.encode(),
+                    })
+                    return
+                if not msg.get("more_body"):
+                    break
+            elif msg["type"] == "http.disconnect":
+                return
+        sent = {"done": False}
+
+        async def buffered_receive():
+            if not sent["done"]:
+                sent["done"] = True
+                return {"type": "http.request", "body": body, "more_body": False}
+            return {"type": "http.disconnect"}
+
+        await self.app(scope, buffered_receive, send)
+
+
+app.add_middleware(BodySizeLimitMiddleware, max_bytes=config.MAX_BODY_BYTES)
 
 
 def _seed_corpus_if_empty() -> None:
@@ -88,7 +140,6 @@ def stats():
 # ---------------- 检测 ----------------
 @app.post("/api/checks")
 async def create_check(
-    request: Request,
     file: UploadFile | None = File(None),
     text: str | None = Form(None),
     title: str = Form(""),
@@ -97,11 +148,8 @@ async def create_check(
     web_check: bool = Form(False),       # 联网全网核查
     web_check_count: int = Form(10),
 ):
-    # 读取正文之前先校验请求体大小，避免超大请求占用内存
-    cl = request.headers.get("content-length")
-    if cl and cl.isdigit() and int(cl) > config.MAX_BODY_BYTES:
-        raise HTTPException(413, f"请求体超过 {config.MAX_BODY_BYTES // (1024*1024)}MB 上限")
-
+    # 请求体字节上限由 BodySizeLimitMiddleware 在网络层强制（413），
+    # 这里只做业务级的正文长度上限。
     content = ""
     name = ""
     if file is not None and file.filename:
