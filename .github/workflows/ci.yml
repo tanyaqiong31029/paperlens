@@ -18,9 +18,9 @@ jobs:
       - name: 单元测试与 API 冒烟
         working-directory: backend
         run: pytest tests/ -q
-      - name: AIGC 回归评测（固定评测集）
+      - name: AIGC 回归评测（固定评测集 + 质量门槛）
         working-directory: backend
-        run: python scripts/eval_aigc.py
+        run: python scripts/eval_aigc.py --min-auroc 0.80 --max-fpr45 0.40
 
   frontend:
     runs-on: ubuntu-latest

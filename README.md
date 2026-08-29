@@ -55,7 +55,7 @@
 | [antiplag](https://github.com/fanghon/antiplag) | 桌面软件（代码/文本/图片） | 面向论文场景的完整 Web 流程：任务管理、历史、报告导出、自建库 |
 | [simple-aigc-detect](https://github.com/ni00/simple-aigc-detect) 等 AIGC 检测工具 | CLI / 脚本 | 检测只是环节之一：查重→联网核查→多引擎 AIGC→降重改写 形成闭环，且有可解释的特征雷达 |
 
-核心差异一句话：**不是一个算法 demo，而是一套可自部署、可解释、数据不出本机的完整产品**。
+核心差异一句话：**不是一个算法 demo，而是一套可自部署、可解释、默认本地检测（数据流向透明可控）的完整产品**。
 
 ## 快速开始
 
@@ -81,8 +81,22 @@ cd frontend && npm install && npm run dev    # 5173 端口，已配置 /api 代�
   非回环地址启动**强制要求管理员令牌**，设置后 `/api` 下除健康/统计/引擎列表外的接口
   （含报告读取、上传、删除、爬虫、Key 配置）均要求 `X-Admin-Token` 请求头；
 - CORS 默认**不启用**（同源部署天然可用），跨域需求需显式设置 `PAPERLENS_ALLOW_ORIGINS`；
-- 请求体在读取正文前校验大小上限（默认 40MB），检测任务使用有界线程池（并发 2），
-  采集任务并发上限 2，防止资源被单个客户端占满。
+- 请求体上限由 **ASGI 中间件**在网络层强制（按实际接收字节计数，覆盖 multipart/JSON/表单
+  与分块传输，对所有上传接口生效），默认 40MB，可用 `PAPERLENS_MAX_BODY_BYTES` 调整；
+- 检测任务使用有界线程池（并发 2），采集任务并发上限 2，防止资源被单个客户端占满；
+- 若部署在 Nginx / Caddy 之后，建议反代层同步限流：
+
+```nginx
+# Nginx
+client_max_body_size 40m;
+```
+
+```clojure
+;; Caddyfile
+request_body {
+    max_size 40MB
+}
+```
 
 首次启动建议到「语料采集」页跑一轮采集（arXiv / OpenAlex 各 200 篇约 2 分钟），
 把对比库从内置演示语料扩到真实 OA 论文；本地 AIGC 引擎的 n-gram LM 也会随语料自动重建。
