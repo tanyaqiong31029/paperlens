@@ -7,6 +7,7 @@
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg" alt="license"/></a>
+  <a href="https://github.com/tanyaqiong31029/paperlens/actions/workflows/ci.yml"><img src="https://github.com/tanyaqiong31029/paperlens/actions/workflows/ci.yml/badge.svg" alt="CI"/></a>
   <img src="https://img.shields.io/badge/python-3.10%2B-blue.svg" alt="python"/>
   <img src="https://img.shields.io/badge/react-18-61dafb.svg" alt="react"/>
 </p>
@@ -40,9 +41,10 @@ full data-flow table.
   smoothness signals from a corpus-backed trigram LM (inter-sentence burstiness and
   token-level surprisal variance); full-text, per-sentence, and paragraph-level scores with
   a feature radar.
-- **Multi-engine comparison** — local engine + GPTZero / CopyLeaks (real API calls with your
-  key) + a transformers model plugin (HC3-finetuned RoBERTa or your own checkpoints) +
-  CNKI/Wanfang/VIP/Zhuque/Turnitin shown honestly as "no public API".
+- **Multi-engine comparison** — local engine + GPTZero (real API calls with your key;
+  sends the first ≤30,000 characters to the provider) + a transformers model plugin
+  (HC3-finetuned RoBERTa or your own checkpoints) + CopyLeaks (experimental, not callable
+  yet) + CNKI/Wanfang/VIP/Zhuque/Turnitin shown honestly as "no public API".
 - **Rewriting assistance (dedup & humanize)** — locates matched and AI-suspect sentences,
   applies rule-based rewrites (synonym substitution, cliché replacement, connector thinning,
   long-sentence splitting) with per-edit rationales, then re-measures before/after.
@@ -52,8 +54,16 @@ full data-flow table.
 ## Quick start
 
 ```bash
-bash start.sh          # http://localhost:8765
+bash setup.sh          # one-time: install backend deps + npm ci + build frontend
+bash start.sh          # http://127.0.0.1:8765 — loopback only, nothing exposed to LAN
 ```
+
+Security defaults: LAN exposure requires an explicit host plus `PAPERLENS_ADMIN_TOKEN`
+(all mutating API calls then require an `X-Admin-Token` header; the frontend shows a token
+dialog automatically). CORS is off by default. Request bodies are capped by an ASGI
+middleware regardless of Content-Length. See [README.md](README.md) ("Security model" and
+"Privacy & data flow") for the full matrix, including who receives what when external
+engines or web verification are enabled.
 
 Python 3.10+ and Node 18+ required. On first launch, run a crawl from the
 「语料采集 / Corpus Crawler」 page (e.g. 200 papers each from arXiv and OpenAlex, ~2 min)
