@@ -15,7 +15,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import config, db
-from .services import parser
+from .services import ngram_lm, parser
 from .services import checker
 from .services.aigc import engines as aigc_engines
 from .services.corpus import CORPUS
@@ -26,11 +26,12 @@ from .services.exporter import export_html
 async def lifespan(_app: FastAPI):
     db.init_db()
     _seed_corpus_if_empty()
-    CORPUS.rebuild()
-    # AIGC v2 的 n-gram LM 训练放后台线程，不阻塞启动（百万级 token 数秒完成）
-    import threading
-    from .services import ngram_lm
-    threading.Thread(target=ngram_lm.rebuild_lm, daemon=True).start()
+    # 索引快照持久化：哈希匹配则亚秒加载，否则全量重建并落盘
+    _ = CORPUS.load_or_rebuild()
+    if not ngram_lm.LM.ready:
+        # 快照未含 LM（旧快照/首次启动）时才训练，放后台线程不阻塞启动
+        import threading
+        threading.Thread(target=ngram_lm.rebuild_lm, daemon=True).start()
     yield
 
 

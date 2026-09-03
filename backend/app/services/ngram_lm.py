@@ -52,6 +52,21 @@ class TrigramLM:
     def ready(self) -> bool:
         return self._ready
 
+    def state(self) -> dict | None:
+        """导出可 pickle 的 LM 状态（未训练时返回 None，调用方回退到训练线程）。"""
+        if not self._ready:
+            return None
+        return {"uni": self.uni, "bi": self.bi, "tri": self.tri, "total": self.total}
+
+    def set_state(self, st: dict | None) -> None:
+        if not st:
+            return
+        self.uni = st["uni"]
+        self.bi = st["bi"]
+        self.tri = st["tri"]
+        self.total = st["total"]
+        self._ready = True
+
     def _p(self, a: str, b: str, c: str) -> float:
         """P(c | a, b)：三元插值二元 + add-k。"""
         tri_ab = self.bi.get((a, b), 0)
