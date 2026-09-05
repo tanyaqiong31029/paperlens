@@ -27,9 +27,11 @@ full data-flow table.
 
 ## Features
 
-- **Plagiarism detection** — sentence-level n-gram fingerprinting with inverted-index recall and
-  containment verification; character-level (Chinese) and word-level (English) granularity;
-  automatic reference-section stripping.
+- **Plagiarism detection** — sentence-level n-gram fingerprinting with inverted-index recall,
+  dual-gate verification (containment + IDF-coverage to suppress boilerplate false positives),
+  SimHash clustering of near-duplicate sources, and a separate proper-citation rate
+  (quoted spans excluded from the duplication score); character-level (Chinese) and
+  word-level (English) granularity; automatic reference-section stripping.
 - **Web-wide verification** — suspicious sentences are checked against OpenAlex / arXiv /
   Europe PMC (structured APIs that return abstracts — no scraping needed) with
   Bing / DuckDuckGo as fallback; hits are reported with source URL and snippet, plus a

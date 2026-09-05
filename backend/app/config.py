@@ -17,7 +17,7 @@ UPLOAD_DIR = DATA_DIR / "uploads"
 EXPORT_DIR = DATA_DIR / "exports"
 
 APP_NAME = "PaperLens 论文检测中心"
-APP_VERSION = "1.1.0"
+APP_VERSION = "1.2.0"
 MAX_UPLOAD_MB = 15
 MAX_TEXT_CHARS = 2_000_000             # 粘贴正文上限（字符）
 

@@ -3,7 +3,7 @@
 本项目的所有重要变更记录于此文件。
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循语义化版本。
 
-## [Unreleased]
+## [1.2.0] - 2026-09-05
 
 ### 查重口径与算法
 

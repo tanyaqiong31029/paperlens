@@ -153,9 +153,14 @@ request_body {
 的连续串阈值法，工程上改为倒排索引方案）：
 
 1. **召回**：对比库按句建 n-gram 倒排索引（中文 8 字 / 英文 6 词 shingle）；
-2. **确准**：containment = |交集| / min(|A|,|B|)，中文阈值 0.30 / 英文 0.25；
-3. **降噪**：短句（<6 单位）不判、同一句多来源只计一次、相邻相似句合并为标红片段；
-4. **口径**：重复率 = 命中句累计单位（去重）/ 全文单位，参考文献自动剥离。
+2. **双门槛确准**：containment = |交集| / min(|A|,|B|)（中文阈值 0.30 / 英文 0.25），
+   **且 IDF 覆盖率 ≥ 0.2**——纯常见套话（跨文档高频 shingle）即使 containment 高
+   也不判重，判定分 = min(containment, 0.5 + 0.5×IDF覆盖率)；
+3. **降噪**：短句（<6 单位）不判、同一句多来源只计一次、相邻相似句合并为标红片段、
+   SimHash 近重复来源（汉明距 ≤12）聚类为一条主来源 + variants；
+4. **口径**：重复率 = 命中句累计单位（去重，**规范引用剔除**）/ 全文单位，
+   规范引用 = 引号内占比 ≥60% 的命中句单独计入引用率（quote_rate）；
+   参考文献自动剥离，分句器引号感知（引号内句号不切分）。
 
 开发时实测规模：**5,200+ 篇 OA 论文 / 118 万比对单位**，单篇论文检测秒级完成；
 万篇级库无需外置搜索引擎。
@@ -224,6 +229,10 @@ GET  /api/engines                    引擎清单        POST /api/engines/{key}
 不启用上述功能时不会产生任何对外请求（OA 语料采集除外，抓取的是公开文献元数据，
 与用户论文无关）。
 
+**本机数据控制**：审计日志（`data/audit.log`，仅记录事件与标识，不记录正文与 Key）
+覆盖检测提交/报告导出/语料增删/采集启动/引擎配置；设置 `PAPERLENS_RETENTION_DAYS`
+后启动时自动清理过期检测记录（默认 0 = 永久保留）。
+
 ## 数据与合规
 
 - 内置 `seed_corpus/` 为**自撰演示语料**（无版权风险）；真实对比库通过「语料采集」
@@ -234,10 +243,11 @@ GET  /api/engines                    引擎清单        POST /api/engines/{key}
 
 ## 工程质量
 
-- 后端：`pytest tests/`（25 个用例：分句/指纹/查重口径/参考文献剥离/docx 解析/
-  报告导出/改写/API 冒烟/管理令牌/请求体上限），`python scripts/eval_aigc.py`（AIGC 回归评测）
+- 后端：`pytest tests/`（41 个用例：分句/指纹/IDF 加权/查重口径/规范引用/
+  来源聚类/快照持久化/docx 解析/报告导出/改写/API 冒烟/管理令牌/请求体上限/
+  审计与保留期），`python scripts/eval_aigc.py --min-auroc 0.80`（AIGC 回归门槛）
 - 前端：`npm run build`（TypeScript 严格模式），依赖审计随 CI 执行
-- CI：`.github/workflows/ci.yml` —— 后端测试 + 前端构建 + `npm audit --audit-level=high`
+- CI：`.github/workflows/ci.yml` —— 后端测试 + 评测门槛 + 前端构建 + `npm audit --audit-level=high`
 - 后端依赖已在 `requirements.txt` 锁定精确版本；前端由 `package-lock.json` 锁定，
   安装统一走 `npm ci`
 
