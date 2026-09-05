@@ -1,5 +1,4 @@
 """IDF 加权相似度与 df 统计测试。"""
-import math
 
 from app.services import segmenter
 
@@ -17,9 +16,9 @@ def test_blended_similarity_downweights_common_shingles():
     s1 = segmenter.blended_similarity(query, cand_common_only, df, n)
     s2 = segmenter.blended_similarity(query, cand_full, df, n)
 
-    assert cov1 < 0.2                      # IDF 覆盖率低 → 直接不判重
-    assert s1 <= 0.5 + 0.5 * cov1 + 1e-9   # 混合判定分被压低
-    assert s2 == 1.0                       # 完全命中（含独特内容）不受影响
+    assert cov1 < 0.2  # IDF 覆盖率低 → 直接不判重
+    assert s1 <= 0.5 + 0.5 * cov1 + 1e-9  # 混合判定分被压低
+    assert s2 == 1.0  # 完全命中（含独特内容）不受影响
 
 
 def test_weighted_similarity_perfect_match_is_one():
@@ -36,6 +35,7 @@ def test_weighted_similarity_disjoint_is_zero():
 def test_df_counts_document_frequency():
     from app import db
     from app.services.corpus import Corpus
+
     shared = "共享的实验设计与数据分析方法在两个文档中同时出现。"
     docs = [
         ("文档一", shared + "文档一的独特结论部分。"),
@@ -47,7 +47,7 @@ def test_df_counts_document_frequency():
         if not db.doc_title_exists(t):
             ids.append(db.add_doc(t, c, len(c)))
     if not ids:
-        for t, c in docs:  # 已存在（重复运行），取现有 id
+        for _t, _c in docs:  # 已存在（重复运行），取现有 id
             ids.append(db.all_docs_full() and 0)
     c = Corpus(snapshot_path="/tmp/df-test.pkl")
     c.rebuild()

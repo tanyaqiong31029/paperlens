@@ -8,7 +8,9 @@
 可信数据目录内使用）。启动时若快照哈希与当前语料一致则直接加载，
 否则全量重建并落盘；增量入库仅标记脏位，进程退出时统一回写。
 """
+
 import atexit
+import contextlib
 import hashlib
 import os
 import pickle
@@ -46,6 +48,7 @@ def _snapshot_path() -> str:
 
 def _lm_state():
     from . import ngram_lm
+
     return ngram_lm.LM.state()
 
 
@@ -55,7 +58,7 @@ class Corpus:
         self.docs: dict[int, CorpusDoc] = {}
         self.fingerprints: dict[int, int] = {}
         self.inverted: dict[str, list[tuple[int, int]]] = {}
-        self.df: dict[str, int] = {}          # shingle → 出现该 shingle 的文档数（IDF 用）
+        self.df: dict[str, int] = {}  # shingle → 出现该 shingle 的文档数（IDF 用）
         self.state_hash: str = ""
         self._dirty = False
         self._snap = snapshot_path or _snapshot_path()
@@ -78,16 +81,13 @@ class Corpus:
             self.fingerprints.clear()
             self.df.clear()
             from .fingerprint import simhash
+
             for row in db.all_docs_full():
                 did = int(row["id"])
                 kind = segmenter.detect_language(row["content"])
-                sents = [
-                    s for s in segmenter.split_sentences(row["content"])
-                    if s.units >= 4
-                ]
+                sents = [s for s in segmenter.split_sentences(row["content"]) if s.units >= 4]
                 self.docs[did] = CorpusDoc(did, row["title"], bool(row["is_builtin"]), sents)
-                self.fingerprints[did] = simhash(
-                    segmenter.normalize(row["content"], kind), kind)
+                self.fingerprints[did] = simhash(segmenter.normalize(row["content"], kind), kind)
                 doc_shingles: set[str] = set()
                 for idx, s in enumerate(sents):
                     sh = segmenter.shingles(s)
@@ -118,6 +118,7 @@ class Corpus:
                     self.df = payload.get("df", {})
                     self.state_hash = payload["hash"]
                 from . import ngram_lm
+
                 ngram_lm.LM.set_state(payload.get("lm"))
                 return "loaded"
         self.rebuild()
@@ -144,10 +145,9 @@ class Corpus:
 
     def save_snapshot_if_dirty(self) -> None:
         if self._dirty and self.state_hash:
-            try:
+            # 退出时落盘失败不影响主流程
+            with contextlib.suppress(Exception):
                 self.save_snapshot()
-            except Exception:  # noqa: BLE001 — 退出时落盘失败不影响主流程
-                pass
 
     def _mark_dirty(self) -> None:
         self._dirty = True
@@ -164,12 +164,10 @@ class Corpus:
             if did in self.docs:
                 return
             kind = segmenter.detect_language(row["content"])
-            sents = [
-                s for s in segmenter.split_sentences(row["content"])
-                if s.units >= 4
-            ]
+            sents = [s for s in segmenter.split_sentences(row["content"]) if s.units >= 4]
             self.docs[did] = CorpusDoc(did, row["title"], bool(row["is_builtin"]), sents)
             from .fingerprint import simhash
+
             self.fingerprints[did] = simhash(segmenter.normalize(row["content"], kind), kind)
             doc_shingles: set[str] = set()
             for idx, s in enumerate(sents):
@@ -179,7 +177,7 @@ class Corpus:
                     self.inverted.setdefault(x, []).append((did, idx))
             for x in doc_shingles:
                 self.df[x] = self.df.get(x, 0) + 1
-            self.state_hash = self._state_hash()   # 语料已变，重算状态指纹
+            self.state_hash = self._state_hash()  # 语料已变，重算状态指纹
             self._mark_dirty()
 
     def remove_doc(self, doc_id: int) -> None:
@@ -199,10 +197,12 @@ class Corpus:
                 self.inverted[key] = [p for p in self.inverted[key] if p[0] != doc_id]
                 if not self.inverted[key]:
                     del self.inverted[key]
-            self.state_hash = self._state_hash()   # 语料已变，重算状态指纹
+            self.state_hash = self._state_hash()  # 语料已变，重算状态指纹
             self._mark_dirty()
 
-    def find_similar(self, sent: segmenter.Sentence, threshold: float, top: int = 3) -> list[Candidate]:
+    def find_similar(
+        self, sent: segmenter.Sentence, threshold: float, top: int = 3
+    ) -> list[Candidate]:
         """返回相似度 >= threshold 的候选句，按相似度降序。"""
         sh = segmenter.shingles(sent)
         if not sh:
@@ -243,9 +243,7 @@ class Corpus:
 
     def stats(self) -> dict:
         with self._lock:
-            chars = sum(
-                sum(s.units for s in d.sentences) for d in self.docs.values()
-            )
+            chars = sum(sum(s.units for s in d.sentences) for d in self.docs.values())
             builtin = sum(1 for d in self.docs.values() if d.is_builtin)
             return {
                 "documents": len(self.docs),

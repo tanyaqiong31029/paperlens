@@ -1,4 +1,5 @@
 """查重主流程测试：基于临时库构造语料，验证命中、来源与降噪。"""
+
 import pytest
 
 from app import db
@@ -15,8 +16,7 @@ def seed_corpus():
         "这一项完全无关的句子用来撑起篇幅，讲述的是别的事情，不会和查询文本产生任何重合。"
     )
     doc_b = (
-        "乡村振兴战略下农村电商发展迅速。"
-        "物流体系的完善为农产品上行提供了坚实支撑，带动了农民增收。"
+        "乡村振兴战略下农村电商发展迅速。物流体系的完善为农产品上行提供了坚实支撑，带动了农民增收。"
     )
     doc_a_id = db.add_doc("图像识别研究", doc_a, len(doc_a))
     db.add_doc("农村电商观察", doc_b, len(doc_b))
@@ -69,7 +69,7 @@ def test_quoted_citation_reduced_from_total_rate():
     r_cited = plagiarism.run(cited, {"strip_references": False})
     r_plain = plagiarism.run(raw, {"strip_references": False})
     assert r_plain["quote_rate"] == 0.0
-    assert r_cited["quote_rate"] > 30          # 引号内容被识别为规范引用
+    assert r_cited["quote_rate"] > 30  # 引号内容被识别为规范引用
     assert r_cited["total_rate"] < r_plain["total_rate"]  # 复制比因规范引用下降
 
 
@@ -83,11 +83,10 @@ def test_near_duplicate_sources_clustered():
         "深度学习技术在图像识别领域取得了突破性进展，卷积神经网络能够有效提取图像的局部特征，"
         "并在多个基准数据集上刷新了纪录，而且该方法在推理阶段维持了较低的计算开销。"
     )
-    import os
     for t, c in [("聚类原文", base), ("聚类改写版", variant)]:
         if not db.doc_title_exists(t):
             did = db.add_doc(t, c, len(c))
-            CORPUS.add_and_index(did)   # 模拟真实入库路径：文档进指纹库
+            CORPUS.add_and_index(did)  # 模拟真实入库路径：文档进指纹库
     CORPUS.rebuild()
     r = plagiarism.run(base, {"strip_references": False})
     titles = [s["title"] for s in r["sources"]]

@@ -3,6 +3,7 @@
 单位约定：中文以"字"为单位，英文以"词"为单位。
 归一化只保留 [汉字/字母/数字]，用于指纹比对；原文片段保留用于报告展示。
 """
+
 import math
 import re
 from dataclasses import dataclass
@@ -18,12 +19,12 @@ _EN_WORD_RE = re.compile(r"[A-Za-z0-9']+")
 
 @dataclass
 class Sentence:
-    start: int          # 原文偏移
+    start: int  # 原文偏移
     end: int
-    text: str           # 原句
-    units: int          # 字数（中文）或词数（英文）
-    norm: str           # 归一化串（中文）或空格连接的小写词（英文）
-    kind: str           # zh / en
+    text: str  # 原句
+    units: int  # 字数（中文）或词数（英文）
+    norm: str  # 归一化串（中文）或空格连接的小写词（英文）
+    kind: str  # zh / en
 
 
 def detect_language(text: str) -> str:
@@ -54,13 +55,16 @@ def split_sentences(text: str) -> list[Sentence]:
     in_quote = False
     while i < n:
         ch = text[i]
-        if ch in "“”\"‘’":
+        if ch in '“”"‘’':
             in_quote = not in_quote
         elif not in_quote:
-            if ch in ZH_END:
-                _push(sents, text, start, i + 1)
-                start = i + 1
-            elif ch in ".!?" and (i + 1 == n or text[i + 1] in " \t\n\r\"')】」）》" or not text[i + 1].isalnum()):
+            if (
+                ch in ZH_END
+                or ch in ".!?"
+                and (
+                    i + 1 == n or text[i + 1] in " \t\n\r\"')】」）》" or not text[i + 1].isalnum()
+                )
+            ):
                 _push(sents, text, start, i + 1)
                 start = i + 1
             elif ch == "\n":
@@ -104,12 +108,12 @@ def shingles_norm(norm: str, kind: str) -> set[str]:
         n = config.ZH_SHINGLE
         if len(norm) < n:
             return {norm} if len(norm) >= 4 else set()
-        return {norm[i: i + n] for i in range(len(norm) - n + 1)}
+        return {norm[i : i + n] for i in range(len(norm) - n + 1)}
     n = config.EN_SHINGLE
     words = norm.split()
     if len(words) < n:
         return {" ".join(words)} if len(words) >= 4 else set()
-    return {" ".join(words[i: i + n]) for i in range(len(words) - n + 1)}
+    return {" ".join(words[i : i + n]) for i in range(len(words) - n + 1)}
 
 
 def similarity(query: set[str], cand: set[str]) -> float:

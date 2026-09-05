@@ -13,39 +13,121 @@
   交叉验证。
 - 输出：全文级 + 句子级 AI 疑似度 + 八维特征雷达；段落级风险聚合。
 """
+
 import math
 import re
 
 from ... import config
-from .. import segmenter, ngram_lm
+from .. import ngram_lm, segmenter
 
 ZH_CONNECTORS = [
-    "因此", "然而", "此外", "同时", "综上所述", "总而言之", "首先", "其次",
-    "再次", "最后", "一方面", "另一方面", "值得注意的是", "与此同时",
-    "更重要的是", "不仅如此", "随着", "基于此", "由此可见", "换句话说",
+    "因此",
+    "然而",
+    "此外",
+    "同时",
+    "综上所述",
+    "总而言之",
+    "首先",
+    "其次",
+    "再次",
+    "最后",
+    "一方面",
+    "另一方面",
+    "值得注意的是",
+    "与此同时",
+    "更重要的是",
+    "不仅如此",
+    "随着",
+    "基于此",
+    "由此可见",
+    "换句话说",
 ]
 ZH_CLICHES = [
-    "具有重要意义", "重要的理论意义", "实践意义", "奠定坚实基础", "提供有力支持",
-    "发挥着重要作用", "发挥重要作用", "广泛应用", "深入研究", "不断涌现",
-    "日益增长", "密切相关", "取得显著成效", "有效提升", "不断优化", "日趋完善",
-    "提供了新的思路", "新的机遇和挑战", "可持续发展", "高质量发展", "深度融合",
-    "助力", "赋能", "全方位", "多层次", "多角度", "深入探讨", "进行了系统",
-    "进行了深入研究", "旨在", "本文将从", "综上所述", "值得注意的是",
-    "需要指出的是", "不难发现", "由此可见", "显而易见",
+    "具有重要意义",
+    "重要的理论意义",
+    "实践意义",
+    "奠定坚实基础",
+    "提供有力支持",
+    "发挥着重要作用",
+    "发挥重要作用",
+    "广泛应用",
+    "深入研究",
+    "不断涌现",
+    "日益增长",
+    "密切相关",
+    "取得显著成效",
+    "有效提升",
+    "不断优化",
+    "日趋完善",
+    "提供了新的思路",
+    "新的机遇和挑战",
+    "可持续发展",
+    "高质量发展",
+    "深度融合",
+    "助力",
+    "赋能",
+    "全方位",
+    "多层次",
+    "多角度",
+    "深入探讨",
+    "进行了系统",
+    "进行了深入研究",
+    "旨在",
+    "本文将从",
+    "综上所述",
+    "值得注意的是",
+    "需要指出的是",
+    "不难发现",
+    "由此可见",
+    "显而易见",
 ]
 EN_CONNECTORS = [
-    "however", "moreover", "furthermore", "additionally", "in conclusion",
-    "overall", "therefore", "thus", "firstly", "secondly", "thirdly",
-    "nevertheless", "in addition", "on the other hand", "in summary",
-    "consequently", "as a result", "for instance", "for example", "notably",
+    "however",
+    "moreover",
+    "furthermore",
+    "additionally",
+    "in conclusion",
+    "overall",
+    "therefore",
+    "thus",
+    "firstly",
+    "secondly",
+    "thirdly",
+    "nevertheless",
+    "in addition",
+    "on the other hand",
+    "in summary",
+    "consequently",
+    "as a result",
+    "for instance",
+    "for example",
+    "notably",
 ]
 EN_CLICHES = [
-    "it is important to note", "plays a crucial role", "plays a vital role",
-    "in today's", "delve into", "leverage", "comprehensive understanding",
-    "a testament to", "ever-evolving", "navigate the", "foster",
-    "underscore", "pave the way", "significant impact", "in the realm of",
-    "it is worth noting", "landscape of", "multifaceted", "robust",
-    "seamless", "holistic", "paradigm shift", "cutting-edge", "in summary",
+    "it is important to note",
+    "plays a crucial role",
+    "plays a vital role",
+    "in today's",
+    "delve into",
+    "leverage",
+    "comprehensive understanding",
+    "a testament to",
+    "ever-evolving",
+    "navigate the",
+    "foster",
+    "underscore",
+    "pave the way",
+    "significant impact",
+    "in the realm of",
+    "it is worth noting",
+    "landscape of",
+    "multifaceted",
+    "robust",
+    "seamless",
+    "holistic",
+    "paradigm shift",
+    "cutting-edge",
+    "in summary",
 ]
 
 # 平滑度映射锚点（由对照样本校准测得，见 docs/ 方法说明）：
@@ -79,14 +161,20 @@ def analyze(text: str, lang: str) -> dict:
     # ---- 全文统计特征 ----
     lens = [s.units for s in sents]
     mean_len = sum(lens) / len(lens)
-    var = sum((l - mean_len) ** 2 for l in lens) / len(lens)
+    var = sum((x - mean_len) ** 2 for x in lens) / len(lens)
     cv = math.sqrt(var) / mean_len if mean_len else 0
 
     low = text.lower()
     connectors = ZH_CONNECTORS if lang == "zh" else EN_CONNECTORS
     cliches = ZH_CLICHES if lang == "zh" else EN_CLICHES
-    conn_hits = sum(low.count(c) for c in connectors) if lang == "en" else sum(text.count(c) for c in connectors)
-    cliche_hits = sum(low.count(c) for c in cliches) if lang == "en" else sum(text.count(c) for c in cliches)
+    conn_hits = (
+        sum(low.count(c) for c in connectors)
+        if lang == "en"
+        else sum(text.count(c) for c in connectors)
+    )
+    cliche_hits = (
+        sum(low.count(c) for c in cliches) if lang == "en" else sum(text.count(c) for c in cliches)
+    )
     conn_density = conn_hits / len(sents)
     cliche_density = cliche_hits / len(sents)
 
@@ -147,8 +235,16 @@ def analyze(text: str, lang: str) -> dict:
     sent_scores: list[dict] = []
     for s in sents:
         sl = s.text.lower()
-        sh = sum(sl.count(c) for c in cliches) if lang == "en" else sum(s.text.count(c) for c in cliches)
-        ch = sum(sl.count(c) for c in connectors) if lang == "en" else sum(s.text.count(c) for c in connectors)
+        sh = (
+            sum(sl.count(c) for c in cliches)
+            if lang == "en"
+            else sum(s.text.count(c) for c in cliches)
+        )
+        ch = (
+            sum(sl.count(c) for c in connectors)
+            if lang == "en"
+            else sum(s.text.count(c) for c in connectors)
+        )
         len_dev = abs(s.units - mean_len) / mean_len if mean_len else 0
         opener = s.text[:2] if lang == "zh" else " ".join(sl.split()[:2])
         is_formula_head = opener in {h for h in heads if heads.count(h) >= 3}
@@ -165,15 +261,24 @@ def analyze(text: str, lang: str) -> dict:
                 # 句内平滑度显著低于全文中位 → 更"均匀" → AI 信号
                 zc += 0.5 * _safe((med_tb - tb) / med_tb / 0.5, 0, 1.2)
         score = round(_sigmoid(zc * 1.4) * 100, 1)
-        level = "high" if score >= config.AIGC_HIGH else ("mid" if score >= config.AIGC_MID else "low")
-        sent_scores.append({
-            "start": s.start, "end": s.end, "text": s.text,
-            "score": score, "level": level,
-        })
+        level = (
+            "high" if score >= config.AIGC_HIGH else ("mid" if score >= config.AIGC_MID else "low")
+        )
+        sent_scores.append(
+            {
+                "start": s.start,
+                "end": s.end,
+                "text": s.text,
+                "score": score,
+                "level": level,
+            }
+        )
 
     # 全文最终分 = 字数加权句级均值 ×0.6 + 统计集成 ×0.4
     wsum = sum(x["end"] - x["start"] for x in sent_scores)
-    weighted = (sum(x["score"] * (x["end"] - x["start"]) for x in sent_scores) / wsum) if wsum else total
+    weighted = (
+        (sum(x["score"] * (x["end"] - x["start"]) for x in sent_scores) / wsum) if wsum else total
+    )
     final = round(weighted * 0.6 + total * 0.4, 1)
 
     features = {
@@ -214,16 +319,25 @@ def _paragraph_scores(sent_scores: list[dict]) -> list[dict]:
     out = []
     for i, group in enumerate(paras):
         rate = round(sum(g["score"] for g in group) / len(group), 1)
-        out.append({
-            "index": i, "start": group[0]["start"], "end": group[-1]["end"],
-            "rate": rate, "high_count": sum(1 for g in group if g["level"] == "high"),
-            "count": len(group),
-        })
+        out.append(
+            {
+                "index": i,
+                "start": group[0]["start"],
+                "end": group[-1]["end"],
+                "rate": rate,
+                "high_count": sum(1 for g in group if g["level"] == "high"),
+                "count": len(group),
+            }
+        )
     return out
 
 
 def _empty() -> dict:
     return {
-        "engine": "本地集成引擎 v2", "total_rate": 0.0, "sentence_scores": [],
-        "paragraphs": [], "features": {}, "note": "文本过短",
+        "engine": "本地集成引擎 v2",
+        "total_rate": 0.0,
+        "sentence_scores": [],
+        "paragraphs": [],
+        "features": {},
+        "note": "文本过短",
     }

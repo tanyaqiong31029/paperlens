@@ -7,12 +7,13 @@
 - 同一句命中多个来源时取最相似来源展示，其余来源保留在 all_sources；
 - 相邻相似句合并为"片段"，与知网/PaperPass 报告的标红块对应。
 """
+
 import re
 
-from . import segmenter
-from .parser import strip_references
-from .corpus import CORPUS
 from .. import config
+from . import segmenter
+from .corpus import CORPUS
+from .parser import strip_references
 
 _QUOTE_RE = re.compile(r"“([^”]*)”|\"([^\"]*)\"|‘([^’]*)’")
 
@@ -33,18 +34,17 @@ def _threshold_for(kind: str) -> float:
 def run(text: str, options: dict) -> dict:
     strip_refs = options.get("strip_references", True)
     body = strip_references(text) if strip_refs else text
-    lang = segmenter.detect_language(text)
     sents = segmenter.split_sentences(body)
 
     # 文末残余若被 strip 截断，最后一行仍会进入 body，无碍比对。
     total_units = sum(s.units for s in sents)
-    dup_units = 0            # 计入复制比的单位（规范引用剔除后）
-    quote_units_total = 0    # 规范引用单位（引号内），单独口径
+    dup_units = 0  # 计入复制比的单位（规范引用剔除后）
+    quote_units_total = 0  # 规范引用单位（引号内），单独口径
 
     sent_results: list[dict] = []
     sources: dict[int, dict] = {}
     src_order: list[int] = []
-    all_src_counts: dict[int, int] = {}   # 每个来源文档在逐句 all_sources 中的出现次数
+    all_src_counts: dict[int, int] = {}  # 每个来源文档在逐句 all_sources 中的出现次数
 
     for s in sents:
         th = _threshold_for(s.kind)
@@ -68,40 +68,49 @@ def run(text: str, options: dict) -> dict:
             else:
                 dup_units += s.units
                 quote_units_total += min(q, s.units)
-            sent_results.append({
-                "start": s.start,
-                "end": s.end,
-                "text": s.text,
-                "units": s.units,
-                "norm": s.norm,
-                "kind": s.kind,
-                "matched": True,
-                "quote_units": q,
-                "best": {
-                    "doc_id": best.doc_id,
-                    "title": best.doc_title,
-                    "src_text": best.sent_text,
-                    "sim": best.sim,
-                },
-                "all_sources": [
-                    {"doc_id": c.doc_id, "title": c.doc_title, "src_text": c.sent_text, "sim": c.sim}
-                    for c in cands
-                ],
-            })
+            sent_results.append(
+                {
+                    "start": s.start,
+                    "end": s.end,
+                    "text": s.text,
+                    "units": s.units,
+                    "norm": s.norm,
+                    "kind": s.kind,
+                    "matched": True,
+                    "quote_units": q,
+                    "best": {
+                        "doc_id": best.doc_id,
+                        "title": best.doc_title,
+                        "src_text": best.sent_text,
+                        "sim": best.sim,
+                    },
+                    "all_sources": [
+                        {
+                            "doc_id": c.doc_id,
+                            "title": c.doc_title,
+                            "src_text": c.sent_text,
+                            "sim": c.sim,
+                        }
+                        for c in cands
+                    ],
+                }
+            )
             for c in cands:
                 all_src_counts[c.doc_id] = all_src_counts.get(c.doc_id, 0) + 1
         else:
             quote_units_total += quoted_units(s.text, s.kind)
-            sent_results.append({
-                "start": s.start,
-                "end": s.end,
-                "text": s.text,
-                "units": s.units,
-                "norm": s.norm,
-                "kind": s.kind,
-                "matched": False,
-                "quote_units": quoted_units(s.text, s.kind),
-            })
+            sent_results.append(
+                {
+                    "start": s.start,
+                    "end": s.end,
+                    "text": s.text,
+                    "units": s.units,
+                    "norm": s.norm,
+                    "kind": s.kind,
+                    "matched": False,
+                    "quote_units": quoted_units(s.text, s.kind),
+                }
+            )
 
     rate = round(dup_units / total_units * 100, 1) if total_units else 0.0
     quote_rate = round(quote_units_total / total_units * 100, 1) if total_units else 0.0
@@ -124,7 +133,7 @@ def run(text: str, options: dict) -> dict:
                     if gap > config.FRAG_MERGE_GAP:
                         break
                 j += 1
-            group = sent_results[i: last + 1]
+            group = sent_results[i : last + 1]
             matched_in = [g for g in group if g["matched"]]
             frag_units = sum(g["units"] for g in matched_in)
             by_src: dict[int, float] = {}
@@ -132,15 +141,17 @@ def run(text: str, options: dict) -> dict:
                 by_src[g["best"]["doc_id"]] = by_src.get(g["best"]["doc_id"], 0) + g["units"]
             top_src = max(by_src.items(), key=lambda kv: kv[1])
             top = next(g["best"] for g in matched_in if g["best"]["doc_id"] == top_src[0])
-            fragments.append({
-                "start": group[0]["start"],
-                "end": group[-1]["end"],
-                "text": "".join(g["text"] for g in group),
-                "dup_units": frag_units,
-                "rate": round(frag_units / total_units * 100, 1) if total_units else 0,
-                "best_source": top,
-                "all_sources": _merge_frag_sources(matched_in),
-            })
+            fragments.append(
+                {
+                    "start": group[0]["start"],
+                    "end": group[-1]["end"],
+                    "text": "".join(g["text"] for g in group),
+                    "dup_units": frag_units,
+                    "rate": round(frag_units / total_units * 100, 1) if total_units else 0,
+                    "best_source": top,
+                    "all_sources": _merge_frag_sources(matched_in),
+                }
+            )
             i = last + 1
         else:
             i += 1
@@ -148,10 +159,12 @@ def run(text: str, options: dict) -> dict:
     src_list = []
     for did in src_order:
         sinfo = sources[did]
-        src_list.append({
-            **sinfo,
-            "rate": round(sinfo["dup_units"] / total_units * 100, 1) if total_units else 0,
-        })
+        src_list.append(
+            {
+                **sinfo,
+                "rate": round(sinfo["dup_units"] / total_units * 100, 1) if total_units else 0,
+            }
+        )
     src_list.sort(key=lambda x: -x["dup_units"])
     src_list = _cluster_near_duplicate_sources(src_list, all_src_counts, total_units)
 
@@ -168,8 +181,9 @@ def run(text: str, options: dict) -> dict:
     }
 
 
-def _cluster_near_duplicate_sources(src_list: list[dict], all_src_counts: dict[int, int],
-                                    total_units: int) -> list[dict]:
+def _cluster_near_duplicate_sources(
+    src_list: list[dict], all_src_counts: dict[int, int], total_units: int
+) -> list[dict]:
     """SimHash 近重复来源聚类：同一文献的不同版本合并展示。
 
     句级 best 只会选中一个来源，其近重复版本（SimHash 汉明距 ≤12）出现在
@@ -204,7 +218,16 @@ def _merge_frag_sources(matched: list[dict]) -> list[dict]:
     agg: dict[int, dict] = {}
     for g in matched:
         for src in g["all_sources"]:
-            e = agg.setdefault(src["doc_id"], {"doc_id": src["doc_id"], "title": src["title"], "hits": 0, "sim": 0.0, "src_text": src["src_text"]})
+            e = agg.setdefault(
+                src["doc_id"],
+                {
+                    "doc_id": src["doc_id"],
+                    "title": src["title"],
+                    "hits": 0,
+                    "sim": 0.0,
+                    "src_text": src["src_text"],
+                },
+            )
             e["hits"] += 1
             e["sim"] = max(e["sim"], src["sim"])
     out = sorted(agg.values(), key=lambda x: -x["hits"])

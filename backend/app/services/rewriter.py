@@ -11,6 +11,7 @@
 - 改写完成后自动用同一套查重/AIGC 引擎复测，输出前后对比。
   产品定位：辅助修改自己撰写/引用改写的段落，不得用于掩盖抄袭（见免责声明）。
 """
+
 import re
 
 from . import segmenter
@@ -132,10 +133,12 @@ def _sub_synonyms(text: str, kind: str) -> tuple[str, list[str]]:
     reasons = []
     if kind == "en":
         count = 0
+
         def repl(m):
             nonlocal count
             count += 1
             return SYN_EN[m.group(0).lower()]
+
         pattern = re.compile(r"\b(" + "|".join(SYN_EN) + r")\b", re.I)
         new = pattern.sub(repl, text)
         if count:
@@ -158,7 +161,7 @@ def _split_long(text: str, kind: str) -> tuple[str, list[str]]:
             commas = [m.start() for m in re.finditer("，", text)]
             target = min(commas, key=lambda p: abs(p - len(text) * 0.45))
             if 6 < target < len(text) - 6:
-                text = text[:target] + "。" + text[target + 1:]
+                text = text[:target] + "。" + text[target + 1 :]
                 reasons.append("长句切分（改变句长节奏）")
     else:
         if len(text.split()) >= 26 and "; " in text:
@@ -172,7 +175,7 @@ def _thin_connector(text: str, seen: set) -> tuple[str, set, list[str]]:
     for head in CONNECTOR_HEADS_ZH:
         if text.startswith(head):
             if head in seen:
-                return text[len(head):], seen, [f"删除句首套式连接词「{head}」"]
+                return text[len(head) :], seen, [f"删除句首套式连接词「{head}」"]
             seen.add(head)
             break
     return text, seen, []
@@ -219,10 +222,15 @@ def rewrite(text: str, mode: str = "both") -> dict:
             reasons += r4
         new = new.strip()
         if reasons and new and new != s.text.strip():
-            segments.append({
-                "start": s.start, "end": s.end,
-                "orig": s.text, "new": new, "reasons": reasons,
-            })
+            segments.append(
+                {
+                    "start": s.start,
+                    "end": s.end,
+                    "orig": s.text,
+                    "new": new,
+                    "reasons": reasons,
+                }
+            )
             edits.append((s.start, s.end, new))
 
     # 按偏移从后往前替换，得到改写后全文

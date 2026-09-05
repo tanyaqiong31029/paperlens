@@ -14,6 +14,7 @@
 "未安装"，不影响其他引擎。分块策略：按句聚合到 ≤380 词/字 的块分别推理，
 按字数加权汇总，兼容 512 token 限制。
 """
+
 import os
 
 from .. import segmenter
@@ -32,6 +33,7 @@ def model_name(lang: str) -> str:
 def is_installed() -> bool:
     try:
         import transformers  # noqa: F401
+
         return True
     except Exception:  # noqa: BLE001
         return False
@@ -41,11 +43,14 @@ def _get_pipe(lang: str):
     if lang in _pipes:
         return _pipes[lang]
     import transformers
+
     name = model_name(lang)
     if not name:
         raise RuntimeError(f"未配置 {lang} 检测模型")
     _pipes[lang] = transformers.pipeline(
-        "text-classification", model=name, truncation=True,
+        "text-classification",
+        model=name,
+        truncation=True,
         top_k=None,
     )
     return _pipes[lang]

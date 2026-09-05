@@ -1,0 +1,39 @@
+name: Standards
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: standards-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gitleaks:
+    name: Gitleaks（全历史防密扫描）
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  lint:
+    name: Lint（ruff check + ruff format --check）
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: 安装 ruff（与 .pre-commit-config.yaml 同版本）
+        run: pip install ruff==0.12.5
+      - name: Ruff lint
+        run: ruff check .
+      - name: Ruff format 校验
+        run: ruff format --check .
+# 说明：pytest（backend）与前端构建/审计已由 ci.yml 覆盖，本文件只新增
+# gitleaks 与 lint 两个门禁，避免重复跑测试；mypy 宽松档尚有存量错误，暂不入 CI。

@@ -5,24 +5,35 @@
 - 知网 / 万方 / 维普 / 朱雀 / Turnitin：无公开 API（机构接口），
   在报告中如实标注"需机构接口对接"，不做假数据。
 """
+
 import json
 import urllib.request
 
-from ... import config
-from ... import db
-from . import local_engine
-from . import model_engine
+from ... import config, db
+from . import local_engine, model_engine
 
 
 class EngineOutcome(dict):
     pass
 
 
-def _outcome(key: str, name: str, region: str, status: str, rate: float | None = None,
-             note: str = "", sentences: list | None = None) -> dict:
+def _outcome(
+    key: str,
+    name: str,
+    region: str,
+    status: str,
+    rate: float | None = None,
+    note: str = "",
+    sentences: list | None = None,
+) -> dict:
     return {
-        "key": key, "name": name, "region": region, "status": status,
-        "rate": rate, "note": note, "sentence_scores": sentences or [],
+        "key": key,
+        "name": name,
+        "region": region,
+        "status": status,
+        "rate": rate,
+        "note": note,
+        "sentence_scores": sentences or [],
     }
 
 
@@ -32,7 +43,12 @@ def detect_all(text: str, lang: str) -> list[dict]:
     # 1) 本地引擎（内置，永远执行）
     local = local_engine.analyze(text, lang)
     local_out = _outcome(
-        "local", local["engine"], "内置", "ok", local["total_rate"], local["note"],
+        "local",
+        local["engine"],
+        "内置",
+        "ok",
+        local["total_rate"],
+        local["note"],
         local["sentence_scores"],
     )
     # 附带完整分析结果供报告页使用（雷达图、段落风险）
@@ -46,35 +62,66 @@ def detect_all(text: str, lang: str) -> list[dict]:
     if model_engine.is_installed():
         try:
             mr = model_engine.analyze(text, lang)
-            results.append(_outcome(
-                "transformers", f"本地模型引擎", "国际+国内", "ok", mr["total_rate"],
-                f"模型 {mr.get('model', '')}，{mr.get('chunks', 0)} 块加权",
-            ))
+            results.append(
+                _outcome(
+                    "transformers",
+                    "本地模型引擎",
+                    "国际+国内",
+                    "ok",
+                    mr["total_rate"],
+                    f"模型 {mr.get('model', '')}，{mr.get('chunks', 0)} 块加权",
+                )
+            )
         except Exception as e:  # noqa: BLE001
-            results.append(_outcome(
-                "transformers", "本地模型引擎", "国际+国内", "error", None, f"推理失败：{e}",
-            ))
+            results.append(
+                _outcome(
+                    "transformers",
+                    "本地模型引擎",
+                    "国际+国内",
+                    "error",
+                    None,
+                    f"推理失败：{e}",
+                )
+            )
     else:
-        results.append(_outcome(
-            "transformers", "本地模型引擎", "国际+国内", "not_configured", None,
-            "未安装 transformers（pip install 'transformers>=4.40' torch），安装后自动加载 HC3 微调检测器",
-        ))
+        results.append(
+            _outcome(
+                "transformers",
+                "本地模型引擎",
+                "国际+国内",
+                "not_configured",
+                None,
+                "未安装 transformers（pip install 'transformers>=4.40' torch），安装后自动加载 HC3 微调检测器",
+            )
+        )
 
     # 1.6) 实验性引擎（当前不可真实调用，如实标注，不发送任何数据）
     for key, meta in config.EXPERIMENTAL_ENGINES.items():
-        results.append(_outcome(
-            key, meta["name"], meta["region"], "experimental", None,
-            meta["desc"] + "。本次未向任何第三方发送数据。",
-        ))
+        results.append(
+            _outcome(
+                key,
+                meta["name"],
+                meta["region"],
+                "experimental",
+                None,
+                meta["desc"] + "。本次未向任何第三方发送数据。",
+            )
+        )
 
     # 2) 可配置的真实外部引擎
     for key, meta in config.EXTERNAL_ENGINES.items():
         conf = keys.get(key)
         if not conf or not conf.get("enabled") or not conf.get("api_key"):
-            results.append(_outcome(
-                key, meta["name"], meta["region"], "not_configured", None,
-                "未配置 API Key，可在「引擎配置」页填写后启用",
-            ))
+            results.append(
+                _outcome(
+                    key,
+                    meta["name"],
+                    meta["region"],
+                    "not_configured",
+                    None,
+                    "未配置 API Key，可在「引擎配置」页填写后启用",
+                )
+            )
             continue
         try:
             if meta["adapter"] == "gptzero":
@@ -83,19 +130,30 @@ def detect_all(text: str, lang: str) -> list[dict]:
                 rate, note = None, "适配器未实现"
             results.append(_outcome(key, meta["name"], meta["region"], "ok", rate, note))
         except Exception as e:  # noqa: BLE001
-            results.append(_outcome(key, meta["name"], meta["region"], "error", None, f"调用失败：{e}"))
+            results.append(
+                _outcome(key, meta["name"], meta["region"], "error", None, f"调用失败：{e}")
+            )
 
     # 3) 仅展示用途的机构引擎
     for meta in config.INFO_ONLY_ENGINES:
-        results.append(_outcome(
-            meta["key"], meta["name"], meta["region"], "manual", None, meta["desc"],
-        ))
+        results.append(
+            _outcome(
+                meta["key"],
+                meta["name"],
+                meta["region"],
+                "manual",
+                None,
+                meta["desc"],
+            )
+        )
     return results
 
 
 def _post_json(url: str, payload: dict, headers: dict, timeout: int = 30) -> dict:
     req = urllib.request.Request(
-        url, data=json.dumps(payload).encode(), method="POST",
+        url,
+        data=json.dumps(payload).encode(),
+        method="POST",
         headers={"Content-Type": "application/json", **headers},
     )
     with urllib.request.urlopen(req, timeout=timeout) as resp:
@@ -116,32 +174,54 @@ def _call_gptzero(text: str, api_key: str) -> tuple[float, str]:
 
 def list_engines() -> list[dict]:
     keys = db.get_engine_keys()
-    out = [{
-        "key": "transformers",
-        "name": "本地模型引擎（transformers）",
-        "region": "国际+国内",
-        "desc": "HC3 微调 RoBERTa 检测器插件（可用 AIGC_MODEL_EN/ZH 指向自训模型，"
-                "兼容 NLPCC'25 DetectRL-ZH 等中文方案）",
-        "type": "model",
-        "configured": model_engine.is_installed(),
-        "enabled": model_engine.is_installed(),
-    }]
+    out = [
+        {
+            "key": "transformers",
+            "name": "本地模型引擎（transformers）",
+            "region": "国际+国内",
+            "desc": "HC3 微调 RoBERTa 检测器插件（可用 AIGC_MODEL_EN/ZH 指向自训模型，"
+            "兼容 NLPCC'25 DetectRL-ZH 等中文方案）",
+            "type": "model",
+            "configured": model_engine.is_installed(),
+            "enabled": model_engine.is_installed(),
+        }
+    ]
     for key, meta in config.EXTERNAL_ENGINES.items():
         conf = keys.get(key, {})
-        out.append({
-            **meta, "key": key, "type": "api",
-            "configured": bool(conf.get("api_key")),
-            "enabled": bool(conf.get("enabled")),
-        })
+        out.append(
+            {
+                **meta,
+                "key": key,
+                "type": "api",
+                "configured": bool(conf.get("api_key")),
+                "enabled": bool(conf.get("enabled")),
+            }
+        )
     for key, meta in config.EXPERIMENTAL_ENGINES.items():
-        out.append({**meta, "key": key, "type": "api", "experimental": True,
-                    "configured": False, "enabled": False})
+        out.append(
+            {
+                **meta,
+                "key": key,
+                "type": "api",
+                "experimental": True,
+                "configured": False,
+                "enabled": False,
+            }
+        )
     for meta in config.INFO_ONLY_ENGINES:
-        out.append({**meta, "key": meta["key"], "type": "manual",
-                    "configured": False, "enabled": False})
+        out.append(
+            {**meta, "key": meta["key"], "type": "manual", "configured": False, "enabled": False}
+        )
     for key, meta in config.SEARCH_PROVIDERS.items():
         conf = keys.get(key, {})
-        out.append({**meta, "key": key, "region": "联网核查", "type": "search",
-                    "configured": bool(conf.get("api_key")),
-                    "enabled": bool(conf.get("enabled"))})
+        out.append(
+            {
+                **meta,
+                "key": key,
+                "region": "联网核查",
+                "type": "search",
+                "configured": bool(conf.get("api_key")),
+                "enabled": bool(conf.get("enabled")),
+            }
+        )
     return out

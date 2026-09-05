@@ -9,6 +9,7 @@
 局限：样本与内置语料同源、AI 样本套话特征明显，指标不能代表真实检测精度；
 后续应补充更难的正式论文、人工润色 AI 文本、非母语作者与跨领域文本。
 """
+
 import argparse
 import json
 import os
@@ -16,13 +17,15 @@ import sys
 from pathlib import Path
 
 # 固定数据目录 → 只种子内置语料，保证本地与 CI 结果一致
-os.environ.setdefault("PAPERLENS_DATA_DIR", str(Path(__file__).resolve().parent.parent / "evals" / "data"))
+os.environ.setdefault(
+    "PAPERLENS_DATA_DIR", str(Path(__file__).resolve().parent.parent / "evals" / "data")
+)
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from app import db                                   # noqa: E402
-from app.services.aigc import local_engine           # noqa: E402
-from app.services.corpus import CORPUS               # noqa: E402
-from app.services import ngram_lm, segmenter         # noqa: E402
+from app import db  # noqa: E402
+from app.services import ngram_lm  # noqa: E402
+from app.services.aigc import local_engine  # noqa: E402
+from app.services.corpus import CORPUS  # noqa: E402
 
 
 def auroc(scores_pos: list[float], scores_neg: list[float]) -> float:
@@ -84,9 +87,11 @@ def main() -> None:
 
     rows = ["| 子集 | AUROC | 最佳F1(阈值) | FPR@45 | FPR@70 |", "|---|---|---|---|---|"]
     metrics = {}
-    for name, subset in [("全部", scored),
-                         ("中文", [s for s in scored if s[2] == "zh"]),
-                         ("英文", [s for s in scored if s[2] == "en"])]:
+    for name, subset in [
+        ("全部", scored),
+        ("中文", [s for s in scored if s[2] == "zh"]),
+        ("英文", [s for s in scored if s[2] == "en"]),
+    ]:
         pos = [s for s, y, _ in subset if y == 1]
         neg = [s for s, y, _ in subset if y == 0]
         auc = auroc(pos, neg)
@@ -97,7 +102,9 @@ def main() -> None:
                 best_f1, best_th = f1, th
         _, _, fpr45 = f1_at([(s, y) for s, y, _ in subset], 45)
         _, _, fpr70 = f1_at([(s, y) for s, y, _ in subset], 70)
-        rows.append(f"| {name} | {auc:.3f} | {best_f1:.3f} ({best_th}) | {fpr45:.2f} | {fpr70:.2f} |")
+        rows.append(
+            f"| {name} | {auc:.3f} | {best_f1:.3f} ({best_th}) | {fpr45:.2f} | {fpr70:.2f} |"
+        )
         print(rows[-1])
         metrics[name] = (auc, fpr45)
 

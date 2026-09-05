@@ -4,6 +4,7 @@
 文档按 title 去重后入库并实时加入查重倒排索引。OpenAlex 索引全球
 2.5 亿+ 篇文献元数据，可用 language:zh 过滤中文 OA 论文。
 """
+
 import json
 import re
 import threading
@@ -30,19 +31,23 @@ def _get(url: str, params: dict | None = None, timeout: int = 25) -> bytes:
 
 # ---------------- 各数据源适配器（generator：逐篇产出） ----------------
 
+
 def iter_arxiv(query: str, target: int, stop, errors: list):
     """arXiv 预印本（英文为主），Atom API。"""
     ns = "{http://www.w3.org/2005/Atom}"
     start, fails = 0, 0
     while start < target and not stop():
         try:
-            raw = _get("http://export.arxiv.org/api/query", {
-                "search_query": query.strip() or "cat:cs.CL",
-                "start": start,
-                "max_results": min(100, target - start),
-                "sortBy": "submittedDate",
-                "sortOrder": "descending",
-            })
+            raw = _get(
+                "http://export.arxiv.org/api/query",
+                {
+                    "search_query": query.strip() or "cat:cs.CL",
+                    "start": start,
+                    "max_results": min(100, target - start),
+                    "sortBy": "submittedDate",
+                    "sortOrder": "descending",
+                },
+            )
             root = ET.fromstring(raw)
             entries = root.findall(f"{ns}entry")
             if not entries:
@@ -52,8 +57,12 @@ def iter_arxiv(query: str, target: int, stop, errors: list):
                 summary = re.sub(r"\s+", " ", (e.findtext(f"{ns}summary") or "")).strip()
                 link = (e.findtext(f"{ns}id") or "").strip()
                 if title and len(summary) >= 80:
-                    yield {"title": title, "content": f"{title}\n\n{summary}",
-                           "url": link, "origin": "oa:arxiv"}
+                    yield {
+                        "title": title,
+                        "content": f"{title}\n\n{summary}",
+                        "url": link,
+                        "origin": "oa:arxiv",
+                    }
             start += 100
             fails = 0
             time.sleep(3)  # arXiv 官方要求请求间隔
@@ -74,13 +83,18 @@ def iter_openalex(lang: str, query: str, target: int, stop, errors: list):
             q = query.strip().replace(",", " ")
             if q:
                 filt += f",title_and_abstract.search:{q}"
-            data = json.loads(_get("https://api.openalex.org/works", {
-                "filter": filt,
-                "per-page": 200,
-                "cursor": cursor,
-                "sort": "publication_date:desc",
-                "mailto": MAILTO,
-            }))
+            data = json.loads(
+                _get(
+                    "https://api.openalex.org/works",
+                    {
+                        "filter": filt,
+                        "per-page": 200,
+                        "cursor": cursor,
+                        "sort": "publication_date:desc",
+                        "mailto": MAILTO,
+                    },
+                )
+            )
             for w in data.get("results", []):
                 inv = w.get("abstract_inverted_index")
                 if not inv:
@@ -93,9 +107,15 @@ def iter_openalex(lang: str, query: str, target: int, stop, errors: list):
                 title = (w.get("display_name") or "").strip()
                 if not title or len(abstract) < 80:
                     continue
-                url = w.get("doi") or (w.get("primary_location") or {}).get("landing_page_url") or ""
-                yield {"title": title, "content": f"{title}\n\n{abstract}",
-                       "url": url, "origin": f"oa:openalex-{lang}"}
+                url = (
+                    w.get("doi") or (w.get("primary_location") or {}).get("landing_page_url") or ""
+                )
+                yield {
+                    "title": title,
+                    "content": f"{title}\n\n{abstract}",
+                    "url": url,
+                    "origin": f"oa:openalex-{lang}",
+                }
             cursor = (data.get("meta") or {}).get("next_cursor")
             if not cursor:
                 return
@@ -115,23 +135,29 @@ def iter_doaj(query: str, target: int, stop, errors: list):
     while not stop():
         try:
             q = urllib.parse.quote(query.strip() or "*")
-            data = json.loads(_get(
-                f"https://doaj.org/api/v2/search/articles/{q}",
-                {"pageSize": 100, "page": page},
-            ))
+            data = json.loads(
+                _get(
+                    f"https://doaj.org/api/v2/search/articles/{q}",
+                    {"pageSize": 100, "page": page},
+                )
+            )
             results = data.get("results", [])
             for r in results:
                 bj = r.get("bibjson") or {}
                 title = (bj.get("title") or "").strip()
                 abstract = (bj.get("abstract") or "").strip()
                 link = ""
-                for l in bj.get("link", []):
-                    if l.get("type") == "fulltext" and l.get("url"):
-                        link = l["url"]
+                for lk in bj.get("link", []):
+                    if lk.get("type") == "fulltext" and lk.get("url"):
+                        link = lk["url"]
                         break
                 if title and len(abstract) >= 80:
-                    yield {"title": title, "content": f"{title}\n\n{abstract}",
-                           "url": link, "origin": "oa:doaj"}
+                    yield {
+                        "title": title,
+                        "content": f"{title}\n\n{abstract}",
+                        "url": link,
+                        "origin": "oa:doaj",
+                    }
             if len(results) < 100:
                 return
             page += 1
@@ -151,10 +177,18 @@ def iter_europepmc(query: str, target: int, stop, errors: list):
     while not stop():
         try:
             q = f"({query.strip()}) AND OPEN_ACCESS:y" if query.strip() else "OPEN_ACCESS:y"
-            data = json.loads(_get("https://www.ebi.ac.uk/europepmc/webservices/rest/search", {
-                "query": q, "format": "json", "pageSize": 100,
-                "page": page, "resultType": "core",
-            }))
+            data = json.loads(
+                _get(
+                    "https://www.ebi.ac.uk/europepmc/webservices/rest/search",
+                    {
+                        "query": q,
+                        "format": "json",
+                        "pageSize": 100,
+                        "page": page,
+                        "resultType": "core",
+                    },
+                )
+            )
             results = (data.get("resultList") or {}).get("result", [])
             for r in results:
                 title = (r.get("title") or "").strip()
@@ -167,8 +201,12 @@ def iter_europepmc(query: str, target: int, stop, errors: list):
                 else:
                     url = ""
                 if title and len(abstract) >= 80:
-                    yield {"title": title, "content": f"{title}\n\n{abstract}",
-                           "url": url, "origin": "oa:europepmc"}
+                    yield {
+                        "title": title,
+                        "content": f"{title}\n\n{abstract}",
+                        "url": url,
+                        "origin": "oa:europepmc",
+                    }
             if len(results) < 100:
                 return
             page += 1
@@ -240,7 +278,7 @@ def sources_info() -> list[dict]:
 
 # ---------------- 任务管理 ----------------
 
-MAX_CONCURRENT_CRAWLS = 2          # 并发采集任务上限（有界，避免线程无限制增长）
+MAX_CONCURRENT_CRAWLS = 2  # 并发采集任务上限（有界，避免线程无限制增长）
 _active_jobs = 0
 _jobs_lock = threading.Lock()
 
@@ -287,17 +325,21 @@ def _run_job(job_id: str) -> None:
             try:
                 if not db.doc_title_exists(doc["title"]):
                     did = db.add_doc(
-                        doc["title"][:200], doc["content"],
+                        doc["title"][:200],
+                        doc["content"],
                         len(doc["content"].replace(" ", "").replace("\n", "")),
-                        is_builtin=False, origin=doc["origin"], source_url=doc["url"] or "",
+                        is_builtin=False,
+                        origin=doc["origin"],
+                        source_url=doc["url"] or "",
                     )
                     CORPUS.add_and_index(did)
                     added += 1
             except Exception as e:  # noqa: BLE001
                 errors.append(f"入库: {e}")
             if fetched % 25 == 0:
-                db.update_job(job_id, fetched=fetched, added=added,
-                              message="；".join(errors[-2:]) or None)
+                db.update_job(
+                    job_id, fetched=fetched, added=added, message="；".join(errors[-2:]) or None
+                )
             if fetched >= target or fetched - added > 800:  # 达到目标或大量重复标题时收束
                 break
         status = "stopped" if should_stop() else "done"
@@ -306,7 +348,12 @@ def _run_job(job_id: str) -> None:
             msg += "；" + "；".join(errors[-2:])
         db.update_job(job_id, status=status, fetched=fetched, added=added, message=msg[:400])
     except Exception as e:  # noqa: BLE001
-        db.update_job(job_id, status="error", fetched=fetched, added=added,
-                      message=f"{e}；errors: {'；'.join(errors[-2:])}"[:400])
+        db.update_job(
+            job_id,
+            status="error",
+            fetched=fetched,
+            added=added,
+            message=f"{e}；errors: {'；'.join(errors[-2:])}"[:400],
+        )
     finally:
         _release_job()

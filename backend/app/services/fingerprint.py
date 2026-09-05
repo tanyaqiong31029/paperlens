@@ -1,8 +1,7 @@
 """SimHash：文档级近似去重指纹（用于语料库管理页的重复文档提示）。"""
+
 import hashlib
 from collections import Counter
-
-from .. import config
 
 
 def _hash64(token: str) -> int:
@@ -12,10 +11,10 @@ def _hash64(token: str) -> int:
 def simhash(norm_text: str, kind: str = "zh") -> int:
     """对归一化文本整体计算 64 位 SimHash。"""
     if kind == "zh":
-        grams = [norm_text[i: i + 4] for i in range(max(1, len(norm_text) - 3))]
+        grams = [norm_text[i : i + 4] for i in range(max(1, len(norm_text) - 3))]
     else:
         words = norm_text.split()
-        grams = [" ".join(words[i: i + 4]) for i in range(max(1, len(words) - 3))]
+        grams = [" ".join(words[i : i + 4]) for i in range(max(1, len(words) - 3))]
     if not grams:
         return 0
     weights = Counter(grams)
