@@ -25,6 +25,7 @@ export default function Report() {
   const [data, setData] = useState<CheckDetail | null>(null)
   const [error, setError] = useState('')
   const [tab, setTab] = useState<Tab>('overview')
+  const [progress, setProgress] = useState<{ stage?: string; pct: number } | null>(null)
 
   const load = useCallback(() => {
     if (!id) return
@@ -50,11 +51,24 @@ export default function Report() {
     load()
   }, [load])
 
-  // 未完成时轮询
+  // 检测中：SSE 订阅进度（断连自动回退轮询）
   useEffect(() => {
     if (!data || data.status === 'done' || data.status === 'error') return
-    const t = setTimeout(load, 1200)
-    return () => clearTimeout(t)
+    let fallback: number | undefined
+    const es = new EventSource(`/api/checks/${data.id}/events`)
+    es.onmessage = ev => {
+      try {
+        const p = JSON.parse(ev.data)
+        setProgress({ stage: p.stage, pct: p.pct ?? 0 })
+        if (p.status === 'error') { es.close(); load() }
+      } catch { /* 忽略格式异常 */ }
+    }
+    es.addEventListener('end', () => { es.close(); load() })
+    es.onerror = () => {
+      es.close()
+      fallback = window.setTimeout(load, 1200)
+    }
+    return () => { es.close(); if (fallback) clearTimeout(fallback) }
   }, [data, load])
 
   if (error) {
@@ -67,11 +81,23 @@ export default function Report() {
   }
 
   if (data.status !== 'done' && data.status !== 'error') {
+    const stageLabel: Record<string, string> = {
+      parse: '解析文档', compare: '比对语料库', web: '联网全网核查',
+      aigc: 'AIGC 多引擎分析', save: '生成报告',
+    }
+    const pct = progress?.pct ?? 8
     return (
       <Center>
         <Loader2 className="animate-spin text-indigo-500" size={36} />
         <p className="mt-4 font-medium text-slate-700">正在检测：{data.title}</p>
-        <p className="mt-1 text-sm text-slate-400">分句 → 指纹比对 → AIGC 多引擎分析中，请稍候…</p>
+        <p className="mt-1 text-sm text-slate-400">
+          {progress?.stage ? stageLabel[progress.stage] ?? progress.stage : '任务已受理'}…
+        </p>
+        <div className="mt-5 w-72 h-2.5 bg-slate-100 rounded-full overflow-hidden">
+          <div className="h-full rounded-full bg-gradient-to-r from-indigo-400 to-indigo-600 transition-all duration-500"
+            style={{ width: `${Math.max(6, Math.min(96, pct))}%` }} />
+        </div>
+        <p className="mt-2 text-xs text-slate-400">{pct}%</p>
       </Center>
     )
   }
@@ -120,6 +146,9 @@ export default function Report() {
               <p className="mt-2 text-xs text-slate-400 leading-relaxed">
                 命中 {plag.matched_sentences}/{plag.sentence_count} 句<br />
                 重复 {plag.dup_units} / 比对 {plag.total_units} 单位
+                {typeof plag.quote_rate === 'number' && plag.quote_rate > 0 && (
+                  <><br />其中规范引用 {plag.quote_rate}%（未计入复制比）</>
+                )}
               </p>
             </div>
           </div>

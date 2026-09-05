@@ -35,5 +35,6 @@ def hamming(a: int, b: int) -> int:
     return bin(a ^ b).count("1")
 
 
-def is_near_duplicate(a: int, b: int) -> bool:
-    return hamming(a, b) <= 12
+def is_near_duplicate(a: int, b: int, max_h: int = 12) -> bool:
+    """SimHash 汉明距离 ≤ max_h 视为近似重复（默认 12；来源聚类用更严阈值）。"""
+    return hamming(a, b) <= max_h

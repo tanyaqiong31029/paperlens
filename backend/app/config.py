@@ -23,6 +23,7 @@ MAX_TEXT_CHARS = 2_000_000             # 粘贴正文上限（字符）
 
 ADMIN_TOKEN = os.environ.get("PAPERLENS_ADMIN_TOKEN", "").strip()
 MAX_BODY_BYTES = int(os.environ.get("PAPERLENS_MAX_BODY_BYTES", str(40 * 1024 * 1024)))
+RETENTION_DAYS = int(os.environ.get("PAPERLENS_RETENTION_DAYS", "0"))  # 0=永久保留
 
 # ---------- 查重参数 ----------
 # 中文按"字"为最小单位，英文按"词"。指纹 shingle 长度参考开源

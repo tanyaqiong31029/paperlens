@@ -17,7 +17,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Streamin
 from fastapi.staticfiles import StaticFiles
 
 from . import config, db
-from .services import ngram_lm, parser
+from .services import audit, ngram_lm, parser
 from .services import checker
 from .services.aigc import engines as aigc_engines
 from .services.corpus import CORPUS
@@ -34,6 +34,11 @@ async def lifespan(_app: FastAPI):
         # 快照未含 LM（旧快照/首次启动）时才训练，放后台线程不阻塞启动
         import threading
         threading.Thread(target=ngram_lm.rebuild_lm, daemon=True).start()
+    # 报告保留期清理（PAPERLENS_RETENTION_DAYS 设置后启用，0=永久保留）
+    if config.RETENTION_DAYS > 0:
+        removed = db.purge_old_checks(config.RETENTION_DAYS)
+        print(f"[paperlens] 保留期清理：删除 {removed} 条超过 "
+              f"{config.RETENTION_DAYS} 天的检测记录")
     yield
 
 
@@ -196,6 +201,8 @@ async def create_check(
     }
     check_id = checker.submit(display_title, content, options,
                               doc_hash=doc_hash, params_hash=params_hash)
+    audit.log_event("check_submit", check_id=check_id, title=display_title,
+                    doc_hash=doc_hash[:12], word_count=len(content))
     return {"check_id": check_id, "deduplicated": False}
 
 
@@ -282,6 +289,7 @@ async def add_library_doc(
     doc_title = title.strip() or Path(name).stem if name else (title.strip() or content.strip().splitlines()[0][:40])
     doc_id = db.add_doc(doc_title, content, len(content.replace(" ", "").replace("\n", "")))
     CORPUS.add_and_index(doc_id)
+    audit.log_event("library_add", doc_id=doc_id, title=doc_title)
     return {"id": doc_id, "title": doc_title}
 
 
@@ -295,6 +303,7 @@ def delete_library_doc(doc_id: int):
     if not db.delete_doc(doc_id):
         raise HTTPException(400, "内置语料不可删除或文档不存在")
     CORPUS.remove_doc(doc_id)
+    audit.log_event("library_delete", doc_id=doc_id)
     return {"ok": True}
 
 
@@ -334,6 +343,7 @@ async def start_crawl(request: Request):
         raise HTTPException(400, str(e))
     except RuntimeError as e:
         raise HTTPException(429, str(e))
+    audit.log_event("crawl_start", source=str(body.get("source", "")), target=body.get("target", 200))
     return {"job_id": job_id}
 
 

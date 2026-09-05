@@ -18,7 +18,7 @@ from dataclasses import dataclass
 from .. import config, db
 from . import segmenter
 
-SNAPSHOT_VERSION = 3  # 快照结构版本：结构变更时递增使旧快照失效
+SNAPSHOT_VERSION = 4  # 快照结构版本：结构变更时递增使旧快照失效
 _dirty = {"flag": False}
 _atexit_registered = {"done": False}
 
@@ -55,6 +55,7 @@ class Corpus:
         self.docs: dict[int, CorpusDoc] = {}
         self.fingerprints: dict[int, int] = {}
         self.inverted: dict[str, list[tuple[int, int]]] = {}
+        self.df: dict[str, int] = {}          # shingle → 出现该 shingle 的文档数（IDF 用）
         self.state_hash: str = ""
         self._dirty = False
         self._snap = snapshot_path or _snapshot_path()
@@ -75,6 +76,7 @@ class Corpus:
             self.docs.clear()
             self.inverted.clear()
             self.fingerprints.clear()
+            self.df.clear()
             from .fingerprint import simhash
             for row in db.all_docs_full():
                 did = int(row["id"])
@@ -86,9 +88,14 @@ class Corpus:
                 self.docs[did] = CorpusDoc(did, row["title"], bool(row["is_builtin"]), sents)
                 self.fingerprints[did] = simhash(
                     segmenter.normalize(row["content"], kind), kind)
+                doc_shingles: set[str] = set()
                 for idx, s in enumerate(sents):
-                    for sh in segmenter.shingles(s):
-                        self.inverted.setdefault(sh, []).append((did, idx))
+                    sh = segmenter.shingles(s)
+                    doc_shingles |= sh
+                    for x in sh:
+                        self.inverted.setdefault(x, []).append((did, idx))
+                for x in doc_shingles:
+                    self.df[x] = self.df.get(x, 0) + 1
             self.state_hash = self._state_hash()
 
     def load_or_rebuild(self) -> str:
@@ -108,6 +115,7 @@ class Corpus:
                     }
                     self.fingerprints = {int(k): v for k, v in payload["fp"].items()}
                     self.inverted = payload["inv"]
+                    self.df = payload.get("df", {})
                     self.state_hash = payload["hash"]
                 from . import ngram_lm
                 ngram_lm.LM.set_state(payload.get("lm"))
@@ -125,6 +133,7 @@ class Corpus:
                 "docs": {did: (d.title, d.is_builtin, d.sentences) for did, d in self.docs.items()},
                 "inv": self.inverted,
                 "fp": self.fingerprints,
+                "df": self.df,
                 "lm": _lm_state(),
             }
         tmp = self._snap + ".tmp"
@@ -162,16 +171,30 @@ class Corpus:
             self.docs[did] = CorpusDoc(did, row["title"], bool(row["is_builtin"]), sents)
             from .fingerprint import simhash
             self.fingerprints[did] = simhash(segmenter.normalize(row["content"], kind), kind)
+            doc_shingles: set[str] = set()
             for idx, s in enumerate(sents):
-                for sh in segmenter.shingles(s):
-                    self.inverted.setdefault(sh, []).append((did, idx))
+                sh = segmenter.shingles(s)
+                doc_shingles |= sh
+                for x in sh:
+                    self.inverted.setdefault(x, []).append((did, idx))
+            for x in doc_shingles:
+                self.df[x] = self.df.get(x, 0) + 1
             self.state_hash = self._state_hash()   # 语料已变，重算状态指纹
             self._mark_dirty()
 
     def remove_doc(self, doc_id: int) -> None:
         with self._lock:
-            self.docs.pop(doc_id, None)
+            doc = self.docs.pop(doc_id, None)
             self.fingerprints.pop(doc_id, None)
+            if doc is not None:
+                doc_shingles: set[str] = set()
+                for s in doc.sentences:
+                    doc_shingles |= segmenter.shingles(s)
+                for x in doc_shingles:
+                    if self.df.get(x):
+                        self.df[x] -= 1
+                        if self.df[x] <= 0:
+                            self.df.pop(x, None)
             for key in list(self.inverted):
                 self.inverted[key] = [p for p in self.inverted[key] if p[0] != doc_id]
                 if not self.inverted[key]:
@@ -195,6 +218,7 @@ class Corpus:
             ranked = sorted(hits.items(), key=lambda kv: -kv[1])[:200]
             results: list[Candidate] = []
             seen = set()
+            n_docs = max(1, len(self.docs))
             for (did, idx), _ in ranked:
                 if did in seen:
                     continue
@@ -202,10 +226,16 @@ class Corpus:
                 if doc is None:
                     continue
                 cand = doc.sentences[idx]
-                sim = segmenter.similarity(sh, segmenter.shingles(cand))
+                cand_sh = segmenter.shingles(cand)
+                # 判定：containment 与 IDF 覆盖率双门槛——纯常见套话
+                # （IDF 覆盖率 < 0.2）即使 containment 高也不判重
+                cov = segmenter.weighted_similarity(sh, cand_sh, self.df, n_docs)
+                if cov < 0.2:
+                    continue
+                sim = round(min(segmenter.similarity(sh, cand_sh), 0.5 + 0.5 * cov), 4)
                 if sim >= threshold:
                     seen.add(did)
-                    results.append(Candidate(did, doc.title, idx, cand.text, round(sim, 4)))
+                    results.append(Candidate(did, doc.title, idx, cand.text, sim))
                 if len(results) >= top:
                     break
             results.sort(key=lambda c: -c.sim)

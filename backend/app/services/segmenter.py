@@ -3,6 +3,7 @@
 单位约定：中文以"字"为单位，英文以"词"为单位。
 归一化只保留 [汉字/字母/数字]，用于指纹比对；原文片段保留用于报告展示。
 """
+import math
 import re
 from dataclasses import dataclass
 
@@ -42,25 +43,32 @@ def normalize(text: str, kind: str) -> str:
 
 
 def split_sentences(text: str) -> list[Sentence]:
-    """中英混排通用分句：按中英文终止标点切分，保留原文偏移。"""
+    """中英混排通用分句：按中英文终止标点切分，保留原文偏移。
+
+    引号感知：引号（“” ‘’ "）内部的终止标点不切分——规范引用里被引用的
+    原句自带句号，若在引号内切分会导致引用片段统计失真。"""
     sents: list[Sentence] = []
     start = 0
     n = len(text)
     i = 0
+    in_quote = False
     while i < n:
         ch = text[i]
-        if ch in ZH_END:
-            _push(sents, text, start, i + 1)
-            start = i + 1
-        elif ch in ".!?" and (i + 1 == n or text[i + 1] in " \t\n\r\"')】」）》" or not text[i + 1].isalnum()):
-            _push(sents, text, start, i + 1)
-            start = i + 1
-        elif ch == "\n":
-            # 空行或换行作为软边界：把换行前残余推出去
-            seg = text[start:i]
-            if seg.strip():
-                sents.append(_build(text, start, i))
-            start = i + 1
+        if ch in "“”\"‘’":
+            in_quote = not in_quote
+        elif not in_quote:
+            if ch in ZH_END:
+                _push(sents, text, start, i + 1)
+                start = i + 1
+            elif ch in ".!?" and (i + 1 == n or text[i + 1] in " \t\n\r\"')】」）》" or not text[i + 1].isalnum()):
+                _push(sents, text, start, i + 1)
+                start = i + 1
+            elif ch == "\n":
+                # 空行或换行作为软边界：把换行前残余推出去
+                seg = text[start:i]
+                if seg.strip():
+                    sents.append(_build(text, start, i))
+                start = i + 1
         i += 1
     if start < n and text[start:].strip():
         sents.append(_build(text, start, n))
@@ -110,3 +118,32 @@ def similarity(query: set[str], cand: set[str]) -> float:
         return 0.0
     inter = len(query & cand)
     return inter / min(len(query), len(cand))
+
+
+def weighted_similarity(query: set[str], cand: set[str], df: dict[str, int], n_docs: int) -> float:
+    """IDF 覆盖率：query 中"高价值内容"（罕见 shingle）被 cand 覆盖的加权比例。
+
+    与 min-containment 组合使用：纯常见套话即使 containment=1.0，
+    IDF 覆盖率也很低，从而压低模板句误报。"""
+    if not query or not cand:
+        return 0.0
+
+    def w(s: str) -> float:
+        return math.log(1 + n_docs / max(1, df.get(s, 0)))
+
+    total = sum(w(s) for s in query)
+    if total <= 0:
+        return 0.0
+    inter = sum(w(s) for s in query & cand)
+    return inter / total
+
+
+def blended_similarity(query: set[str], cand: set[str], df: dict[str, int], n_docs: int) -> float:
+    """最终判定分 = min(containment, 0.5 + 0.5×IDF覆盖率)。
+
+    完全命中（含独特内容）→ 1.0；只命中常见套话 → 压到 0.5~0.6 区间，
+    低于中文 0.30/英文 0.25 阈值？不——0.5 仍高于阈值，故阈值处额外比较
+    IDF 覆盖率下限（find_similar 中 cov >= 0.2 才算命中）。"""
+    cont = similarity(query, cand)
+    cov = weighted_similarity(query, cand, df, n_docs)
+    return min(cont, 0.5 + 0.5 * cov)

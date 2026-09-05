@@ -67,6 +67,7 @@ export interface WebCheck {
 
 export interface Plagiarism {
   total_rate: number
+  quote_rate?: number
   dup_units: number
   total_units: number
   sentence_count: number

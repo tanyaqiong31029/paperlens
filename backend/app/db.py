@@ -65,6 +65,16 @@ def _migrate() -> None:
         )
 
 
+def purge_old_checks(days: int) -> int:
+    """删除 created_at 早于 N 天的检测记录（保留期清理），返回删除行数。"""
+    with conn() as c:
+        cur = c.execute(
+            "DELETE FROM checks WHERE created_at < datetime('now', ?)",
+            (f"-{int(days)} day",),
+        )
+        return cur.rowcount
+
+
 def find_check_by_hash(doc_hash: str, params_hash: str) -> Optional[sqlite3.Row]:
     """同文档 + 同参数的最近一次完成检测（提交去重用）。"""
     with conn() as c:

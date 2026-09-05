@@ -8,6 +8,7 @@ from app.services.corpus import CORPUS
 
 @pytest.fixture(scope="module", autouse=True)
 def seed_corpus():
+    db.init_db()
     doc_a = (
         "深度学习技术在图像识别领域取得了突破性进展。"
         "卷积神经网络能够有效提取图像的局部特征和全局语义信息，在分类任务中表现优异。"
@@ -17,10 +18,10 @@ def seed_corpus():
         "乡村振兴战略下农村电商发展迅速。"
         "物流体系的完善为农产品上行提供了坚实支撑，带动了农民增收。"
     )
-    id_a = db.add_doc("图像识别研究", doc_a, len(doc_a))
+    doc_a_id = db.add_doc("图像识别研究", doc_a, len(doc_a))
     db.add_doc("农村电商观察", doc_b, len(doc_b))
     CORPUS.rebuild()
-    yield id_a
+    yield doc_a_id
 
 
 def test_copied_text_hits_source():
@@ -59,3 +60,38 @@ def test_same_sentence_counted_once():
     query = "卷积神经网络能够有效提取图像的局部特征和全局语义信息，在分类任务中表现优异。"
     result = plagiarism.run(query, {"strip_references": False})
     assert result["total_rate"] == pytest.approx(100.0, abs=0.5)
+
+
+def test_quoted_citation_reduced_from_total_rate():
+    """规范引用口径：命中句用引号包裹（≥60%）时计入引用率而非复制比。"""
+    raw = "卷积神经网络能够有效提取图像的局部特征和全局语义信息，在分类任务中表现优异。"
+    cited = f"原文指出：“{raw}”"
+    r_cited = plagiarism.run(cited, {"strip_references": False})
+    r_plain = plagiarism.run(raw, {"strip_references": False})
+    assert r_plain["quote_rate"] == 0.0
+    assert r_cited["quote_rate"] > 30          # 引号内容被识别为规范引用
+    assert r_cited["total_rate"] < r_plain["total_rate"]  # 复制比因规范引用下降
+
+
+def test_near_duplicate_sources_clustered():
+    """同一文献的轻微改写版本应被 SimHash 聚类合并为一条来源。"""
+    base = (
+        "深度学习技术在图像识别领域取得了突破性进展，卷积神经网络能够有效提取图像的局部特征，"
+        "并在多个基准数据集上刷新了记录，同时该方法在推理阶段保持了较低的计算开销。"
+    )
+    variant = (
+        "深度学习技术在图像识别领域取得了突破性进展，卷积神经网络能够有效提取图像的局部特征，"
+        "并在多个基准数据集上刷新了纪录，而且该方法在推理阶段维持了较低的计算开销。"
+    )
+    import os
+    for t, c in [("聚类原文", base), ("聚类改写版", variant)]:
+        if not db.doc_title_exists(t):
+            did = db.add_doc(t, c, len(c))
+            CORPUS.add_and_index(did)   # 模拟真实入库路径：文档进指纹库
+    CORPUS.rebuild()
+    r = plagiarism.run(base, {"strip_references": False})
+    titles = [s["title"] for s in r["sources"]]
+    assert "聚类原文" in titles
+    # 两个近重复版本合并为一条来源，变体入 variants
+    main = next(s for s in r["sources"] if s["title"] in ("聚类原文", "聚类改写版"))
+    assert len(main["variants"]) >= 1
