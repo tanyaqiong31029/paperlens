@@ -5,13 +5,15 @@
   PAPERLENS_ADMIN_TOKEN（/api 下的写接口与报告读取随后要求 X-Admin-Token）；
 - CORS 默认不启用（同源部署天然可用）；如需跨域，设 PAPERLENS_ALLOW_ORIGINS。
 """
+import asyncio
 import json
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from fastapi.middleware.gzip import GZipMiddleware
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import config, db
@@ -109,6 +111,8 @@ class BodySizeLimitMiddleware:
 
 
 app.add_middleware(BodySizeLimitMiddleware, max_bytes=config.MAX_BODY_BYTES)
+# 响应压缩：报告 JSON/HTML 文本压缩比约 5:1，显著降低大报告的传输量
+app.add_middleware(GZipMiddleware, minimum_size=1024)
 
 
 def _seed_corpus_if_empty() -> None:
@@ -167,6 +171,21 @@ async def create_check(
     if len(content.strip()) < 50:
         raise HTTPException(400, "正文过短（至少 50 字符），请检查文件内容或直接粘贴文本")
 
+    # 提交去重：同文档 + 同检测参数直接复用已有报告（0 计算）
+    import hashlib
+    doc_hash = hashlib.sha256(content.strip().encode()).hexdigest()
+    params_hash = hashlib.sha256(json.dumps({
+        "mode": mode, "strip_references": strip_references,
+        "web_check": web_check, "web_check_count": web_check_count,
+    }, sort_keys=True).encode()).hexdigest()
+    existing = db.find_check_by_hash(doc_hash, params_hash)
+    if existing:
+        return {
+            "check_id": existing["id"], "deduplicated": True,
+            "reused_from": existing["finished_at"],
+            "message": "与已有检测的文档内容与参数一致，已复用其报告",
+        }
+
     display_title = title.strip() or (Path(name).stem if name else (content.strip().splitlines()[0][:40] if content.strip() else "未命名"))
     options = {
         "mode": mode,
@@ -175,8 +194,9 @@ async def create_check(
         "web_check_count": max(3, min(30, web_check_count)),
         "title": display_title,
     }
-    check_id = checker.submit(display_title, content, options)
-    return {"check_id": check_id}
+    check_id = checker.submit(display_title, content, options,
+                              doc_hash=doc_hash, params_hash=params_hash)
+    return {"check_id": check_id, "deduplicated": False}
 
 
 @app.get("/api/checks")
@@ -196,6 +216,35 @@ def get_check(check_id: str):
 def remove_check(check_id: str):
     db.delete_check(check_id)
     return {"ok": True}
+
+
+@app.get("/api/checks/{check_id}/events")
+async def check_events(check_id: str):
+    """SSE 推送检测进度；status=done/error 后发送 end 事件并关闭。"""
+    async def gen():
+        last = None
+        while True:
+            row = db.get_check(check_id)
+            if row is None:
+                yield 'event: end\ndata: {"status": "error", "error": "报告不存在"}\n\n'
+                return
+            prog = checker.PROGRESS.get(check_id, {})
+            payload = json.dumps({
+                "status": row["status"], "error": row["error"],
+                "stage": prog.get("stage"), "pct": prog.get("pct", 0),
+            }, ensure_ascii=False)
+            if payload != last:
+                last = payload
+                yield f"data: {payload}\n\n"
+            if row["status"] in ("done", "error"):
+                yield f"event: end\ndata: {payload}\n\n"
+                return
+            await asyncio.sleep(0.4)
+
+    return StreamingResponse(
+        gen(), media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @app.get("/api/checks/{check_id}/export")

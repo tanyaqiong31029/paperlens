@@ -11,10 +11,18 @@ from .corpus import CORPUS
 # 有界工作线程池：并发检测数固定，避免每个请求各起一个线程
 EXECUTOR = ThreadPoolExecutor(max_workers=2, thread_name_prefix="paperlens-check")
 
+# 检测进度（进程内）：check_id -> {"stage": str, "pct": int}，供 SSE 推送
+PROGRESS: dict[str, dict] = {}
 
-def submit(title: str, text: str, options: dict) -> str:
+
+def _set_progress(check_id: str, stage: str, pct: int) -> None:
+    PROGRESS[check_id] = {"stage": stage, "pct": pct}
+
+
+def submit(title: str, text: str, options: dict,
+           doc_hash: str = "", params_hash: str = "") -> str:
     check_id = uuid.uuid4().hex[:12]
-    db.create_check(check_id, title, options)
+    db.create_check(check_id, title, options, doc_hash=doc_hash, params_hash=params_hash)
     EXECUTOR.submit(_run, check_id, text, options)
     return check_id
 
@@ -22,6 +30,7 @@ def submit(title: str, text: str, options: dict) -> str:
 def _run(check_id: str, text: str, options: dict) -> None:
     try:
         db.update_check(check_id, status="running")
+        _set_progress(check_id, "parse", 10)
         lang = segmenter.detect_language(text)
         db.update_check(check_id, language=lang, word_count=len(text.replace(" ", "").replace("\n", "")))
 
@@ -34,15 +43,18 @@ def _run(check_id: str, text: str, options: dict) -> None:
         if plag_part is not None and options.get("web_check"):
             from . import webcheck
             try:
+                _set_progress(check_id, "web", 55)
                 plag_part["web"] = webcheck.run(plag_part["sent_results"], options)
             except Exception as e:  # noqa: BLE001
                 plag_part["web"] = {"status": "error", "note": f"联网核查异常：{e}"}
 
+        _set_progress(check_id, "aigc", 70)
         aigc_part = aigc_engines.detect_all(text, lang) if do_aigc else None
 
         if plag_part is not None:
             db.update_check(check_id, title=_title_from(text, options.get("title", "")))
 
+        _set_progress(check_id, "save", 92)
         report = {
             "plagiarism": plag_part,
             "aigc": {
@@ -53,6 +65,7 @@ def _run(check_id: str, text: str, options: dict) -> None:
         }
         db.update_check(check_id, status="done", report=json.dumps(report, ensure_ascii=False),
                         finished_at=db.now())
+        _set_progress(check_id, "done", 100)
     except Exception as e:  # noqa: BLE001
         db.update_check(check_id, status="error", error=str(e), finished_at=db.now())
 

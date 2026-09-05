@@ -155,6 +155,58 @@ def test_reduce_api(client):
     assert d["full_text"] != text
 
 
+def test_dedup_reuses_existing_report(client):
+    text = (
+        "综上所述，社交媒体营销已经成为企业数字化转型的重要组成部分。"
+        "研究表明，内容质量与互动频率对品牌传播效果具有重要影响，值得深入探讨。"
+        "值得注意的是，短视频平台的兴起带来了新的机遇和挑战。此外，直播电商进一步缩短了消费决策链条。"
+    )
+    r1 = client.post("/api/checks", data={"text": text, "mode": "full", "title": "去重A"})
+    assert r1.status_code == 200 and r1.json()["deduplicated"] is False
+    first = _wait_done(client, r1.json()["check_id"])
+    assert first["status"] == "done"
+
+    # 同文档 + 同参数 → 复用已有报告（0 计算）
+    r2 = client.post("/api/checks", data={"text": text, "mode": "full", "title": "去重B"})
+    assert r2.status_code == 200
+    j2 = r2.json()
+    assert j2["deduplicated"] is True
+    assert j2["check_id"] == r1.json()["check_id"]
+
+    # 不同参数 → 正常新建任务
+    r3 = client.post("/api/checks", data={"text": text, "mode": "plagiarism"})
+    assert r3.json()["deduplicated"] is False
+    assert r3.json()["check_id"] != r1.json()["check_id"]
+
+
+def test_gzip_on_large_report(client):
+    text = "综上所述，深度学习方法在多语种文本处理任务中表现出色。" * 40
+    cid = client.post("/api/checks", data={"text": text, "mode": "aigc", "title": "gzip测试"}).json()["check_id"]
+    _wait_done(client, cid)
+    r = client.get(f"/api/checks/{cid}", headers={"Accept-Encoding": "gzip"})
+    assert r.status_code == 200
+    assert r.headers.get("content-encoding") == "gzip"
+
+
+def test_sse_progress_stream(client):
+    text = (
+        "综上所述，社交媒体营销已经成为企业数字化转型的重要组成部分。"
+        "研究表明，内容质量与互动频率对品牌传播效果具有重要影响，值得深入探讨。"
+        "值得注意的是，短视频平台的兴起带来了新的机遇和挑战。此外，直播电商缩短了决策链条。"
+    )
+    cid = client.post("/api/checks", data={"text": text, "mode": "full", "title": "SSE测试"}).json()["check_id"]
+    events = []
+    with client.stream("GET", f"/api/checks/{cid}/events") as r:
+        assert r.headers["content-type"].startswith("text/event-stream")
+        for line in r.iter_lines():
+            if line.startswith("data: ") or line.startswith("event: end"):
+                events.append(line)
+            if line.startswith("event: end"):
+                break
+    assert any('"status": "done"' in e for e in events), events[-3:]
+    assert events[-1].startswith("event: end")
+
+
 def test_admin_token_guard(client, monkeypatch):
     monkeypatch.setattr(config, "ADMIN_TOKEN", "secret-token")
     try:

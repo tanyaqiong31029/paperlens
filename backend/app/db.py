@@ -54,6 +54,26 @@ def _migrate() -> None:
             c.execute("ALTER TABLE library_docs ADD COLUMN origin TEXT DEFAULT 'user'")
         if "source_url" not in cols:
             c.execute("ALTER TABLE library_docs ADD COLUMN source_url TEXT DEFAULT ''")
+        ccols = [r[1] for r in c.execute("PRAGMA table_info(checks)")]
+        if "doc_hash" not in ccols:
+            c.execute("ALTER TABLE checks ADD COLUMN doc_hash TEXT")
+        if "params_hash" not in ccols:
+            c.execute("ALTER TABLE checks ADD COLUMN params_hash TEXT")
+        c.execute(
+            "CREATE INDEX IF NOT EXISTS idx_checks_dedup"
+            " ON checks(doc_hash, params_hash, finished_at)"
+        )
+
+
+def find_check_by_hash(doc_hash: str, params_hash: str) -> Optional[sqlite3.Row]:
+    """同文档 + 同参数的最近一次完成检测（提交去重用）。"""
+    with conn() as c:
+        return c.execute(
+            "SELECT id, title, finished_at FROM checks"
+            " WHERE doc_hash=? AND params_hash=? AND status='done'"
+            " ORDER BY finished_at DESC LIMIT 1",
+            (doc_hash, params_hash),
+        ).fetchone()
 
 
 def conn() -> sqlite3.Connection:
@@ -74,11 +94,14 @@ def now() -> str:
 
 
 # ---------- checks ----------
-def create_check(check_id: str, title: str, options: dict) -> None:
+def create_check(check_id: str, title: str, options: dict,
+                 doc_hash: str = "", params_hash: str = "") -> None:
     with conn() as c:
         c.execute(
-            "INSERT INTO checks(id,title,status,options,created_at) VALUES(?,?,?,?,?)",
-            (check_id, title, "queued", json.dumps(options, ensure_ascii=False), now()),
+            "INSERT INTO checks(id,title,status,options,doc_hash,params_hash,created_at)"
+            " VALUES(?,?,?,?,?,?,?)",
+            (check_id, title, "queued", json.dumps(options, ensure_ascii=False),
+             doc_hash, params_hash, now()),
         )
 
 
