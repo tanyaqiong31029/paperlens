@@ -1,5 +1,5 @@
 """API 冒烟测试：健康、统计、完整检测流程、降AIGC、管理令牌、错误输入。"""
-import json
+
 import time
 
 import pytest
@@ -11,7 +11,7 @@ from app.main import app
 
 @pytest.fixture(scope="module")
 def client():
-    with TestClient(app) as c:   # with 语句触发 startup（种子语料 + 索引重建）
+    with TestClient(app) as c:  # with 语句触发 startup（种子语料 + 索引重建）
         yield c
 
 
@@ -64,6 +64,7 @@ def test_too_short_text_rejected(client):
 def test_body_limit_middleware_unit():
     """中间件单测：小上限下超限请求在读满前被 413 拒绝（asyncio.run 驱动）。"""
     import asyncio
+
     from app.main import BodySizeLimitMiddleware
 
     async def run():
@@ -91,7 +92,8 @@ def test_body_limit_middleware_unit():
 def test_body_limit_middleware_api(client, monkeypatch):
     """API 级：覆盖所有上传/JSON 接口（以文档库上传为例），无 Content-Length 也可拦截。"""
     from app.main import app as fastapi_app
-    mw = next(m for m in fastapi_app.user_middleware)  # 确认中间件已挂载
+
+    assert fastapi_app.user_middleware  # 确认中间件已挂载
     big = "x" * (config.MAX_BODY_BYTES + 10)
     r = client.post("/api/library/documents", data={"text": big, "title": "超大"})
     assert r.status_code == 413
@@ -108,7 +110,7 @@ def test_e2e_admin_token_flow(client, monkeypatch):
         "综上所述，社交媒体营销已经成为企业数字化转型的重要组成部分。"
         "研究表明，内容质量与互动频率对品牌传播效果具有重要影响，值得深入探讨。"
     )
-    H = {"X-Admin-Token": "tok-123"}
+    headers = {"X-Admin-Token": "tok-123"}
 
     # 1) 未持令牌：提交与读报告都 401
     assert client.post("/api/checks", data={"text": text}).status_code == 401
@@ -116,18 +118,19 @@ def test_e2e_admin_token_flow(client, monkeypatch):
     r = client.post("/api/checks", data={"text": text, "token": "tok-123"})
     assert r.status_code == 401
     # 3) 用户输入令牌后：提交检测
-    cid = client.post("/api/checks", data={"text": text, "title": "令牌E2E"},
-                      headers=H).json()["check_id"]
+    cid = client.post(
+        "/api/checks", data={"text": text, "title": "令牌E2E"}, headers=headers
+    ).json()["check_id"]
     # 4) 读取报告直至完成
     for _ in range(60):
-        data = client.get(f"/api/checks/{cid}", headers=H).json()
+        data = client.get(f"/api/checks/{cid}", headers=headers).json()
         if data["status"] == "done":
             break
         time.sleep(0.5)
     assert data["status"] == "done"
     assert data["report"]["aigc"]["local"]["rate"] is not None
     # 5) 导出报告（对应前端 blob 下载）
-    exp = client.get(f"/api/checks/{cid}/export", headers=H)
+    exp = client.get(f"/api/checks/{cid}/export", headers=headers)
     assert exp.status_code == 200 and "text/html" in exp.headers["content-type"]
     # 6) 无令牌读报告仍 401
     assert client.get(f"/api/checks/{cid}").status_code == 401
@@ -146,8 +149,10 @@ def test_crawl_sources_offline(client):
 
 
 def test_reduce_api(client):
-    text = ("综上所述，该方法在多个数据集上具有重要意义。研究表明，所提方法效果显著，"
-            "值得深入探讨其内在机理。此外，相关技术日趋完善，为后续研究奠定了坚实基础。")
+    text = (
+        "综上所述，该方法在多个数据集上具有重要意义。研究表明，所提方法效果显著，"
+        "值得深入探讨其内在机理。此外，相关技术日趋完善，为后续研究奠定了坚实基础。"
+    )
     r = client.post("/api/reduce", json={"text": text, "mode": "humanize"})
     assert r.status_code == 200
     d = r.json()
@@ -181,7 +186,9 @@ def test_dedup_reuses_existing_report(client):
 
 def test_gzip_on_large_report(client):
     text = "综上所述，深度学习方法在多语种文本处理任务中表现出色。" * 40
-    cid = client.post("/api/checks", data={"text": text, "mode": "aigc", "title": "gzip测试"}).json()["check_id"]
+    cid = client.post(
+        "/api/checks", data={"text": text, "mode": "aigc", "title": "gzip测试"}
+    ).json()["check_id"]
     _wait_done(client, cid)
     r = client.get(f"/api/checks/{cid}", headers={"Accept-Encoding": "gzip"})
     assert r.status_code == 200
@@ -194,7 +201,9 @@ def test_sse_progress_stream(client):
         "研究表明，内容质量与互动频率对品牌传播效果具有重要影响，值得深入探讨。"
         "值得注意的是，短视频平台的兴起带来了新的机遇和挑战。此外，直播电商缩短了决策链条。"
     )
-    cid = client.post("/api/checks", data={"text": text, "mode": "full", "title": "SSE测试"}).json()["check_id"]
+    cid = client.post(
+        "/api/checks", data={"text": text, "mode": "full", "title": "SSE测试"}
+    ).json()["check_id"]
     events = []
     with client.stream("GET", f"/api/checks/{cid}/events") as r:
         assert r.headers["content-type"].startswith("text/event-stream")
@@ -216,8 +225,9 @@ def test_admin_token_guard(client, monkeypatch):
         assert client.get("/api/health").status_code == 200
         assert client.get("/api/stats").status_code == 200
         # 带令牌 → 通过
-        ok = client.post("/api/checks", data={"text": "测试内容" * 20},
-                         headers={"X-Admin-Token": "secret-token"})
+        ok = client.post(
+            "/api/checks", data={"text": "测试内容" * 20}, headers={"X-Admin-Token": "secret-token"}
+        )
         assert ok.status_code == 200
     finally:
         monkeypatch.setattr(config, "ADMIN_TOKEN", "")

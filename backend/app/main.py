@@ -5,6 +5,7 @@
   PAPERLENS_ADMIN_TOKEN（/api 下的写接口与报告读取随后要求 X-Admin-Token）；
 - CORS 默认不启用（同源部署天然可用）；如需跨域，设 PAPERLENS_ALLOW_ORIGINS。
 """
+
 import asyncio
 import json
 import os
@@ -17,8 +18,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Streamin
 from fastapi.staticfiles import StaticFiles
 
 from . import config, db
-from .services import audit, ngram_lm, parser
-from .services import checker
+from .services import audit, checker, ngram_lm, parser
 from .services.aigc import engines as aigc_engines
 from .services.corpus import CORPUS
 from .services.exporter import export_html
@@ -33,24 +33,29 @@ async def lifespan(_app: FastAPI):
     if not ngram_lm.LM.ready:
         # 快照未含 LM（旧快照/首次启动）时才训练，放后台线程不阻塞启动
         import threading
+
         threading.Thread(target=ngram_lm.rebuild_lm, daemon=True).start()
     # 报告保留期清理（PAPERLENS_RETENTION_DAYS 设置后启用，0=永久保留）
     if config.RETENTION_DAYS > 0:
         removed = db.purge_old_checks(config.RETENTION_DAYS)
-        print(f"[paperlens] 保留期清理：删除 {removed} 条超过 "
-              f"{config.RETENTION_DAYS} 天的检测记录")
+        print(f"[paperlens] 保留期清理：删除 {removed} 条超过 {config.RETENTION_DAYS} 天的检测记录")
     yield
 
 
 app = FastAPI(title=config.APP_NAME, version=config.APP_VERSION, lifespan=lifespan)
 
 # CORS：默认关闭（同源部署不需要）。跨域需求时用环境变量显式开白名单。
-_allow_origins = [o.strip() for o in os.environ.get("PAPERLENS_ALLOW_ORIGINS", "").split(",") if o.strip()]
+_allow_origins = [
+    o.strip() for o in os.environ.get("PAPERLENS_ALLOW_ORIGINS", "").split(",") if o.strip()
+]
 if _allow_origins:
     from fastapi.middleware.cors import CORSMiddleware
+
     app.add_middleware(
-        CORSMiddleware, allow_origins=_allow_origins,
-        allow_methods=["*"], allow_headers=["*"],
+        CORSMiddleware,
+        allow_origins=_allow_origins,
+        allow_methods=["*"],
+        allow_headers=["*"],
     )
 
 
@@ -63,9 +68,12 @@ async def admin_guard(request: Request, call_next):
     """
     if config.ADMIN_TOKEN:
         p = request.url.path
-        if p.startswith("/api") and p not in ("/api/health", "/api/stats", "/api/engines"):
-            if request.headers.get("x-admin-token") != config.ADMIN_TOKEN:
-                return JSONResponse({"detail": "需要管理员令牌（X-Admin-Token）"}, status_code=401)
+        if (
+            p.startswith("/api")
+            and p not in ("/api/health", "/api/stats", "/api/engines")
+            and request.headers.get("x-admin-token") != config.ADMIN_TOKEN
+        ):
+            return JSONResponse({"detail": "需要管理员令牌（X-Admin-Token）"}, status_code=401)
     return await call_next(request)
 
 
@@ -91,14 +99,19 @@ class BodySizeLimitMiddleware:
             if msg["type"] == "http.request":
                 body += msg.get("body", b"")
                 if len(body) > self.max_bytes:
-                    await send({
-                        "type": "http.response.start", "status": 413,
-                        "headers": [(b"content-type", b"application/json; charset=utf-8")],
-                    })
-                    await send({
-                        "type": "http.response.body",
-                        "body": f'{{"detail":"请求体超过 {self.max_bytes // (1024 * 1024)}MB 上限"}}'.encode(),
-                    })
+                    await send(
+                        {
+                            "type": "http.response.start",
+                            "status": 413,
+                            "headers": [(b"content-type", b"application/json; charset=utf-8")],
+                        }
+                    )
+                    await send(
+                        {
+                            "type": "http.response.body",
+                            "body": f'{{"detail":"请求体超过 {self.max_bytes // (1024 * 1024)}MB 上限"}}'.encode(),
+                        }
+                    )
                     return
                 if not msg.get("more_body"):
                     break
@@ -153,9 +166,9 @@ async def create_check(
     file: UploadFile | None = File(None),
     text: str | None = Form(None),
     title: str = Form(""),
-    mode: str = Form("full"),            # full / plagiarism / aigc
+    mode: str = Form("full"),  # full / plagiarism / aigc
     strip_references: bool = Form(True),
-    web_check: bool = Form(False),       # 联网全网核查
+    web_check: bool = Form(False),  # 联网全网核查
     web_check_count: int = Form(10),
 ):
     # 请求体字节上限由 BodySizeLimitMiddleware 在网络层强制（413），
@@ -168,7 +181,7 @@ async def create_check(
         try:
             content = parser.parse_upload(name, data)
         except parser.ParseError as e:
-            raise HTTPException(400, str(e))
+            raise HTTPException(400, str(e)) from e
     elif text:
         content = text
     if len(content) > config.MAX_TEXT_CHARS:
@@ -178,20 +191,33 @@ async def create_check(
 
     # 提交去重：同文档 + 同检测参数直接复用已有报告（0 计算）
     import hashlib
+
     doc_hash = hashlib.sha256(content.strip().encode()).hexdigest()
-    params_hash = hashlib.sha256(json.dumps({
-        "mode": mode, "strip_references": strip_references,
-        "web_check": web_check, "web_check_count": web_check_count,
-    }, sort_keys=True).encode()).hexdigest()
+    params_hash = hashlib.sha256(
+        json.dumps(
+            {
+                "mode": mode,
+                "strip_references": strip_references,
+                "web_check": web_check,
+                "web_check_count": web_check_count,
+            },
+            sort_keys=True,
+        ).encode()
+    ).hexdigest()
     existing = db.find_check_by_hash(doc_hash, params_hash)
     if existing:
         return {
-            "check_id": existing["id"], "deduplicated": True,
+            "check_id": existing["id"],
+            "deduplicated": True,
             "reused_from": existing["finished_at"],
             "message": "与已有检测的文档内容与参数一致，已复用其报告",
         }
 
-    display_title = title.strip() or (Path(name).stem if name else (content.strip().splitlines()[0][:40] if content.strip() else "未命名"))
+    display_title = title.strip() or (
+        Path(name).stem
+        if name
+        else (content.strip().splitlines()[0][:40] if content.strip() else "未命名")
+    )
     options = {
         "mode": mode,
         "strip_references": strip_references,
@@ -199,10 +225,16 @@ async def create_check(
         "web_check_count": max(3, min(30, web_check_count)),
         "title": display_title,
     }
-    check_id = checker.submit(display_title, content, options,
-                              doc_hash=doc_hash, params_hash=params_hash)
-    audit.log_event("check_submit", check_id=check_id, title=display_title,
-                    doc_hash=doc_hash[:12], word_count=len(content))
+    check_id = checker.submit(
+        display_title, content, options, doc_hash=doc_hash, params_hash=params_hash
+    )
+    audit.log_event(
+        "check_submit",
+        check_id=check_id,
+        title=display_title,
+        doc_hash=doc_hash[:12],
+        word_count=len(content),
+    )
     return {"check_id": check_id, "deduplicated": False}
 
 
@@ -228,6 +260,7 @@ def remove_check(check_id: str):
 @app.get("/api/checks/{check_id}/events")
 async def check_events(check_id: str):
     """SSE 推送检测进度；status=done/error 后发送 end 事件并关闭。"""
+
     async def gen():
         last = None
         while True:
@@ -236,10 +269,15 @@ async def check_events(check_id: str):
                 yield 'event: end\ndata: {"status": "error", "error": "报告不存在"}\n\n'
                 return
             prog = checker.PROGRESS.get(check_id, {})
-            payload = json.dumps({
-                "status": row["status"], "error": row["error"],
-                "stage": prog.get("stage"), "pct": prog.get("pct", 0),
-            }, ensure_ascii=False)
+            payload = json.dumps(
+                {
+                    "status": row["status"],
+                    "error": row["error"],
+                    "stage": prog.get("stage"),
+                    "pct": prog.get("pct", 0),
+                },
+                ensure_ascii=False,
+            )
             if payload != last:
                 last = payload
                 yield f"data: {payload}\n\n"
@@ -249,7 +287,8 @@ async def check_events(check_id: str):
             await asyncio.sleep(0.4)
 
     return StreamingResponse(
-        gen(), media_type="text/event-stream",
+        gen(),
+        media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
 
@@ -259,11 +298,9 @@ def export_report(check_id: str):
     html_text = export_html(check_id)
     if not html_text:
         raise HTTPException(404, "报告不存在或尚未完成")
-    row = db.get_check(check_id)
-    safe_title = "".join(c for c in (row["title"] or check_id) if c.isalnum() or c in "-_ ")[:40] or check_id
-    return HTMLResponse(html_text, headers={
-        "Content-Disposition": f"attachment; filename=report_{check_id}.html"
-    })
+    return HTMLResponse(
+        html_text, headers={"Content-Disposition": f"attachment; filename=report_{check_id}.html"}
+    )
 
 
 # ---------------- 自建文档库 ----------------
@@ -281,12 +318,16 @@ async def add_library_doc(
         try:
             content = parser.parse_upload(name, data)
         except parser.ParseError as e:
-            raise HTTPException(400, str(e))
+            raise HTTPException(400, str(e)) from e
     elif text:
         content = text
     if len(content.strip()) < 20:
         raise HTTPException(400, "文档内容过短")
-    doc_title = title.strip() or Path(name).stem if name else (title.strip() or content.strip().splitlines()[0][:40])
+    doc_title = (
+        title.strip() or Path(name).stem
+        if name
+        else (title.strip() or content.strip().splitlines()[0][:40])
+    )
     doc_id = db.add_doc(doc_title, content, len(content.replace(" ", "").replace("\n", "")))
     CORPUS.add_and_index(doc_id)
     audit.log_event("library_add", doc_id=doc_id, title=doc_title)
@@ -340,10 +381,12 @@ async def start_crawl(request: Request):
             target=int(body.get("target", 200)),
         )
     except ValueError as e:
-        raise HTTPException(400, str(e))
+        raise HTTPException(400, str(e)) from e
     except RuntimeError as e:
-        raise HTTPException(429, str(e))
-    audit.log_event("crawl_start", source=str(body.get("source", "")), target=body.get("target", 200))
+        raise HTTPException(429, str(e)) from e
+    audit.log_event(
+        "crawl_start", source=str(body.get("source", "")), target=body.get("target", 200)
+    )
     return {"job_id": job_id}
 
 

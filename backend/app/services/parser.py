@@ -1,9 +1,10 @@
 """文档解析：txt / md / docx / pdf → 纯文本。"""
+
 import io
 import re
 
-from pypdf import PdfReader
 from docx import Document as DocxDocument
+from pypdf import PdfReader
 
 from ..config import MAX_UPLOAD_MB
 

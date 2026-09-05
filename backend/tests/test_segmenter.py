@@ -1,4 +1,5 @@
 """分句、归一化、shingle 与相似度的单元测试。"""
+
 from app.services import segmenter
 
 
@@ -21,11 +22,14 @@ def test_split_sentences_en_offsets():
     assert len(sents) == 3
     # 偏移量必须能还原原句
     for s in sents:
-        assert text[s.start:s.end] == s.text
+        assert text[s.start : s.end] == s.text
 
 
 def test_normalize_zh_strips_punct():
-    assert segmenter.normalize("深度学习（Deep Learning），是 ML 的分支！", "zh") == "深度学习DeepLearning是ML的分支"
+    assert (
+        segmenter.normalize("深度学习（Deep Learning），是 ML 的分支！", "zh")
+        == "深度学习DeepLearning是ML的分支"
+    )
 
 
 def test_normalize_en_keeps_word_spaces():

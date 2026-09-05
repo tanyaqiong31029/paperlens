@@ -16,3 +16,13 @@ tmp/
 *.tsbuildinfo
 marketing/
 backend/evals/data/
+
+# --- 工程规范工具（pre-commit / ruff / mypy / pytest / venv）---
+.venv/
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+*.db
+.env

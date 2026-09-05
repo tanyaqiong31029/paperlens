@@ -1,16 +1,22 @@
 """索引快照持久化测试：加载/重建/哈希失效/增量脏位。"""
+
 import pickle
 
 import pytest
 
 from app import db
-from app.services.corpus import Corpus, SNAPSHOT_VERSION
+from app.services.corpus import SNAPSHOT_VERSION, Corpus
 
 DOCS_A = [
-    ("图像识别研究A", "深度学习技术在图像识别领域取得了突破性进展。卷积神经网络能够有效提取图像的局部特征和全局语义信息。"),
+    (
+        "图像识别研究A",
+        "深度学习技术在图像识别领域取得了突破性进展。卷积神经网络能够有效提取图像的局部特征和全局语义信息。",
+    ),
     ("农村电商观察B", "乡村振兴战略下农村电商发展迅速。物流体系的完善为农产品上行提供了坚实支撑。"),
 ]
-UNIQUE = "量子退相干机制涉及开放量子系统的动力学演化，本文提出新的主方程近似方法并完成数值验证实验。"
+UNIQUE = (
+    "量子退相干机制涉及开放量子系统的动力学演化，本文提出新的主方程近似方法并完成数值验证实验。"
+)
 
 
 def _seed(docs):
@@ -43,6 +49,7 @@ def test_rebuild_then_snapshot_load(fresh_corpus):
     assert fresh2.load_or_rebuild() == "loaded"
     assert fresh2.stats()["documents"] == n_docs
     from app.services import segmenter
+
     probe = segmenter.split_sentences("卷积神经网络能够有效提取图像的局部特征和全局语义信息。")[0]
     hits = fresh2.find_similar(probe, 0.30)
     # 共享 DB 中可能有多个 sim=1.0 的竞争文档，断言"目标文档在满分命中之列"

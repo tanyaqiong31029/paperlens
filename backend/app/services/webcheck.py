@@ -6,6 +6,8 @@
 - 通用网页：Bing API / SerpAPI（配 Key 后优先）→ Bing 网页版 → DuckDuckGo 兜底
 命中判定与本地查重同一套 shingle containment 算法，阈值相同。
 """
+
+import contextlib
 import html as html_lib
 import json
 import re
@@ -18,20 +20,23 @@ from .. import config, db
 from . import segmenter
 
 _UA = {
-    "User-Agent": ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-                   "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"),
+    "User-Agent": (
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"
+    ),
     "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
     "Accept-Encoding": "identity",
 }
 _TIMEOUT = 12
 _MAX_PAGE = 300_000
-_Q_DELAY = 1.2          # 检索间隔（礼貌抓取）
-_ZH_MIN_NORM = 12       # 可疑句最小归一化长度（短句区分度不足，不查询）
+_Q_DELAY = 1.2  # 检索间隔（礼貌抓取）
+_ZH_MIN_NORM = 12  # 可疑句最小归一化长度（短句区分度不足，不查询）
 _EN_MIN_WORDS = 8
-_DEFAULT_BUDGET = 110   # 整体时间预算（秒），防止报告被联网核查拖死
+_DEFAULT_BUDGET = 110  # 整体时间预算（秒），防止报告被联网核查拖死
 
 
 # ---------------- HTTP 与页面正文抽取 ----------------
+
 
 def _http_get(url: str, timeout: int = _TIMEOUT) -> str:
     req = urllib.request.Request(url, headers=_UA)
@@ -65,10 +70,8 @@ class _TextExtractor(HTMLParser):
 
 def extract_text(page_html: str) -> str:
     p = _TextExtractor()
-    try:
+    with contextlib.suppress(Exception):
         p.feed(page_html)
-    except Exception:  # noqa: BLE001
-        pass
     return re.sub(r"\s+", " ", " ".join(p.parts)).strip()
 
 
@@ -84,6 +87,7 @@ def fetch_page_text(url: str) -> str:
 # ---------------- 检索提供方 ----------------
 # 统一返回 [{"url","title","text"?}]；text 缺省时由调用方抓取页面。
 
+
 def _strip_tags(s: str) -> str:
     return html_lib.unescape(re.sub(r"<[^>]+>", "", s)).strip()
 
@@ -91,25 +95,42 @@ def _strip_tags(s: str) -> str:
 def _search_bing_api(q: str) -> list[dict]:
     key = db.get_engine_keys().get("bing_api", {}).get("api_key") or ""
     req = urllib.request.Request(
-        "https://api.bing.microsoft.com/v7.0/search?" + urllib.parse.urlencode({"q": f'"{q}"', "count": 10}),
+        "https://api.bing.microsoft.com/v7.0/search?"
+        + urllib.parse.urlencode({"q": f'"{q}"', "count": 10}),
         headers={**_UA, "Ocp-Apim-Subscription-Key": key},
     )
     with urllib.request.urlopen(req, timeout=_TIMEOUT) as r:
         data = json.loads(r.read().decode("utf-8", "ignore"))
-    return [{"url": w.get("url", ""), "title": w.get("name", "")}
-            for w in (data.get("webPages") or {}).get("value", [])]
+    return [
+        {"url": w.get("url", ""), "title": w.get("name", "")}
+        for w in (data.get("webPages") or {}).get("value", [])
+    ]
 
 
 def _search_serpapi(q: str) -> list[dict]:
     key = db.get_engine_keys().get("serpapi", {}).get("api_key") or ""
-    data = json.loads(_http_get("https://serpapi.com/search.json?" + urllib.parse.urlencode({
-        "q": f'"{q}"', "num": 10, "api_key": key,
-    })))
-    return [{"url": w.get("link", ""), "title": w.get("title", "")} for w in data.get("organic_results", [])]
+    data = json.loads(
+        _http_get(
+            "https://serpapi.com/search.json?"
+            + urllib.parse.urlencode(
+                {
+                    "q": f'"{q}"',
+                    "num": 10,
+                    "api_key": key,
+                }
+            )
+        )
+    )
+    return [
+        {"url": w.get("link", ""), "title": w.get("title", "")}
+        for w in data.get("organic_results", [])
+    ]
 
 
 def _search_bing_html(q: str) -> list[dict]:
-    txt = _http_get("https://cn.bing.com/search?" + urllib.parse.urlencode({"q": f'"{q}"', "count": 10}))
+    txt = _http_get(
+        "https://cn.bing.com/search?" + urllib.parse.urlencode({"q": f'"{q}"', "count": 10})
+    )
     if len(txt) < 2000:
         raise RuntimeError("Bing 返回页面异常（可能被风控）")
     out = []
@@ -136,15 +157,21 @@ def _search_ddg(q: str) -> list[dict]:
 def _search_openalex(q: str, kind: str) -> list[dict]:
     """OpenAlex 全库检索（title+abstract），结果自带摘要，直接可比对。"""
     from .crawler import MAILTO  # 复用 polite pool 邮箱
+
     filt = f"open_access.is_oa:true,language:{'zh' if kind == 'zh' else 'en'}"
-    if kind == "en":
-        terms = " ".join(q.split()[:8])
-    else:
-        terms = q[:12]
-    data = json.loads(_http_get("https://api.openalex.org/works?" + urllib.parse.urlencode({
-        "filter": f"{filt},title_and_abstract.search:{terms}",
-        "per-page": 5, "mailto": MAILTO,
-    })))
+    terms = " ".join(q.split()[:8]) if kind == "en" else q[:12]
+    data = json.loads(
+        _http_get(
+            "https://api.openalex.org/works?"
+            + urllib.parse.urlencode(
+                {
+                    "filter": f"{filt},title_and_abstract.search:{terms}",
+                    "per-page": 5,
+                    "mailto": MAILTO,
+                }
+            )
+        )
+    )
     out = []
     for w in data.get("results", []):
         inv = w.get("abstract_inverted_index")
@@ -156,17 +183,29 @@ def _search_openalex(q: str, kind: str) -> list[dict]:
                 pos_map[p] = word
         abstract = " ".join(pos_map[i] for i in sorted(pos_map))
         url = w.get("doi") or (w.get("primary_location") or {}).get("landing_page_url") or ""
-        out.append({"url": url, "title": w.get("display_name") or "",
-                    "text": f"{w.get('display_name') or ''}\n{abstract}"})
+        out.append(
+            {
+                "url": url,
+                "title": w.get("display_name") or "",
+                "text": f"{w.get('display_name') or ''}\n{abstract}",
+            }
+        )
     return out
 
 
 def _search_arxiv(q: str) -> list[dict]:
     """arXiv exact phrase 检索（all:"..."），结果自带摘要。"""
-    raw = _http_get("http://export.arxiv.org/api/query?" + urllib.parse.urlencode({
-        "search_query": f'all:"{q}"', "max_results": 5,
-    }))
+    raw = _http_get(
+        "http://export.arxiv.org/api/query?"
+        + urllib.parse.urlencode(
+            {
+                "search_query": f'all:"{q}"',
+                "max_results": 5,
+            }
+        )
+    )
     import xml.etree.ElementTree as ET
+
     ns = "{http://www.w3.org/2005/Atom}"
     out = []
     try:
@@ -176,24 +215,45 @@ def _search_arxiv(q: str) -> list[dict]:
     for e in root.findall(f"{ns}entry"):
         title = re.sub(r"\s+", " ", (e.findtext(f"{ns}title") or "")).strip()
         summary = re.sub(r"\s+", " ", (e.findtext(f"{ns}summary") or "")).strip()
-        out.append({"url": (e.findtext(f"{ns}id") or "").strip(), "title": title,
-                    "text": f"{title}\n{summary}"})
+        out.append(
+            {
+                "url": (e.findtext(f"{ns}id") or "").strip(),
+                "title": title,
+                "text": f"{title}\n{summary}",
+            }
+        )
     return out
 
 
 def _search_europepmc(q: str) -> list[dict]:
     """Europe PMC 摘要精确短语检索。"""
-    data = json.loads(_http_get("https://www.ebi.ac.uk/europepmc/webservices/rest/search?" + urllib.parse.urlencode({
-        "query": f'"{q}" AND OPEN_ACCESS:y', "format": "json",
-        "pageSize": 5, "resultType": "core",
-    })))
+    data = json.loads(
+        _http_get(
+            "https://www.ebi.ac.uk/europepmc/webservices/rest/search?"
+            + urllib.parse.urlencode(
+                {
+                    "query": f'"{q}" AND OPEN_ACCESS:y',
+                    "format": "json",
+                    "pageSize": 5,
+                    "resultType": "core",
+                }
+            )
+        )
+    )
     out = []
     for r in (data.get("resultList") or {}).get("result", []):
         abstract = re.sub(r"<[^>]+>", "", r.get("abstractText") or "")
         title = (r.get("title") or "").strip()
         doi = r.get("doi") or ""
-        url = f"https://doi.org/{doi}" if doi else (
-            f"https://europepmc.org/article/{r.get('source')}/{r.get('id')}" if r.get("id") else "")
+        url = (
+            f"https://doi.org/{doi}"
+            if doi
+            else (
+                f"https://europepmc.org/article/{r.get('source')}/{r.get('id')}"
+                if r.get("id")
+                else ""
+            )
+        )
         out.append({"url": url, "title": title, "text": f"{title}\n{abstract}"})
     return out
 
@@ -224,6 +284,7 @@ def _provider_chain(kind: str) -> list[str]:
 
 
 # ---------------- 核心比对 ----------------
+
 
 def _make_query(sent: dict) -> str:
     norm = sent.get("norm") or ""
@@ -328,14 +389,24 @@ def run(sent_results: list[dict], options: dict) -> dict:
                 continue
             m = _match_in_page(s, q, text)
             if m:
-                hits.append({
-                    "start": s["start"], "end": s["end"], "text": s["text"],
-                    "units": s["units"], "url": url, "title": title or url,
-                    "sim": m["sim"], "snippet": m["snippet"], "via": via,
-                })
+                hits.append(
+                    {
+                        "start": s["start"],
+                        "end": s["end"],
+                        "text": s["text"],
+                        "units": s["units"],
+                        "url": url,
+                        "title": title or url,
+                        "sim": m["sim"],
+                        "snippet": m["snippet"],
+                        "via": via,
+                    }
+                )
                 s["web"] = {"url": url, "title": title or url, "sim": m["sim"]}
                 dup_units += s["units"]
-                src = sources.setdefault(url, {"url": url, "title": title or url, "units": 0, "hits": 0})
+                src = sources.setdefault(
+                    url, {"url": url, "title": title or url, "units": 0, "hits": 0}
+                )
                 src["units"] += s["units"]
                 src["hits"] += 1
                 break
@@ -347,7 +418,8 @@ def run(sent_results: list[dict], options: dict) -> dict:
         e["rate"] = round(e["units"] / total_units * 100, 1)
 
     used = sorted({h.get("via", "") for h in hits} - {""}) or sorted(
-        {chains[k][min(pi_by_kind[k], len(chains[k]) - 1)] for k in chains})
+        {chains[k][min(pi_by_kind[k], len(chains[k]) - 1)] for k in chains}
+    )
     if queried == 0 and failed > 0:
         status = "error"
         note = f"检索失败（{last_error}）。可配置 Bing API/SerpAPI Key 提高稳定性。"

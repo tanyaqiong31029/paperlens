@@ -11,12 +11,9 @@
 已知局限（诚实声明）：n-gram 困惑度对改写鲁棒性弱于神经 LM，因此本信号
 只占集成权重的一部分，不单独定论。
 """
-import math
-import re
-from collections import defaultdict
 
-from .. import config
-from . import segmenter
+import math
+from collections import defaultdict
 
 _K = 0.4  # add-k 平滑
 
@@ -35,9 +32,9 @@ class TrigramLM:
             toks = self._tokens(norm, kind)
             for t in toks:
                 self.uni[t] += 1
-            for a, b in zip(toks, toks[1:]):
+            for a, b in zip(toks, toks[1:], strict=False):
                 self.bi[(a, b)] += 1
-            for a, b, c in zip(toks, toks[1:], toks[2:]):
+            for a, b, c in zip(toks, toks[1:], toks[2:], strict=False):
                 self.tri[(a, b, c)] += 1
             self.total += max(0, len(toks) - 2)
         self._ready = self.total > 1000
@@ -83,7 +80,7 @@ class TrigramLM:
         if len(toks) < 8 or not self._ready:
             return None
         logs = []
-        for a, b, c in zip(toks, toks[1:], toks[2:]):
+        for a, b, c in zip(toks, toks[1:], toks[2:], strict=False):
             logs.append(math.log(max(self._p(a, b, c), 1e-12)))
         if not logs:
             return None
@@ -107,7 +104,10 @@ class TrigramLM:
         toks = self._tokens(norm, kind)
         if len(toks) < 8 or not self._ready:
             return None
-        logs = [math.log(max(self._p(a, b, c), 1e-12)) for a, b, c in zip(toks, toks[1:], toks[2:])]
+        logs = [
+            math.log(max(self._p(a, b, c), 1e-12))
+            for a, b, c in zip(toks, toks[1:], toks[2:], strict=False)
+        ]
         if len(logs) < 3:
             return None
         mean = sum(logs) / len(logs)
@@ -139,7 +139,11 @@ def rebuild_lm() -> None:
 
     docs = []
     for d in CORPUS.docs.values():
-        kind = "zh" if any("\u4e00" <= ch <= "\u9fff" for s in d.sentences[:3] for ch in s.norm) else "en"
+        kind = (
+            "zh"
+            if any("\u4e00" <= ch <= "\u9fff" for s in d.sentences[:3] for ch in s.norm)
+            else "en"
+        )
         norm = " ".join(s.norm for s in d.sentences)
         if len(norm) > 100:
             docs.append((norm, kind))

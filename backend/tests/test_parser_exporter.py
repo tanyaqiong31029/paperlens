@@ -1,4 +1,5 @@
 """文件解析与报告导出测试。"""
+
 import io
 
 import pytest
@@ -29,6 +30,7 @@ def test_parse_upload_rejects_unknown_ext():
 
 def test_parse_docx():
     from docx import Document
+
     doc = Document()
     doc.add_paragraph("这是一段用于测试的段落。")
     buf = io.BytesIO()
@@ -42,17 +44,27 @@ def test_export_html_contains_report():
     db.create_check(check_id, "导出测试文档", {})
     report = {
         "plagiarism": {
-            "total_rate": 12.5, "dup_units": 25, "total_units": 200,
-            "sentence_count": 10, "matched_sentences": 2,
-            "fragments": [], "sources": [{"doc_id": 1, "title": "某来源", "dup_units": 25, "rate": 12.5}],
+            "total_rate": 12.5,
+            "dup_units": 25,
+            "total_units": 200,
+            "sentence_count": 10,
+            "matched_sentences": 2,
+            "fragments": [],
+            "sources": [{"doc_id": 1, "title": "某来源", "dup_units": 25, "rate": 12.5}],
             "sent_results": [],
         },
         "aigc": None,
         "options": {},
     }
     import json
-    db.update_check(check_id, language="zh", word_count=200, status="done",
-                    report=json.dumps(report, ensure_ascii=False))
+
+    db.update_check(
+        check_id,
+        language="zh",
+        word_count=200,
+        status="done",
+        report=json.dumps(report, ensure_ascii=False),
+    )
     html = export_html(check_id)
     assert html and "导出测试文档" in html and "12.5%" in html
     assert export_html("no-such-id") is None

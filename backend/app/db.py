@@ -1,8 +1,9 @@
 """SQLite 薄封装：检查任务、文档库、引擎配置。"""
+
 import json
 import sqlite3
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any
 
 from .config import DB_PATH
 
@@ -75,7 +76,7 @@ def purge_old_checks(days: int) -> int:
         return cur.rowcount
 
 
-def find_check_by_hash(doc_hash: str, params_hash: str) -> Optional[sqlite3.Row]:
+def find_check_by_hash(doc_hash: str, params_hash: str) -> sqlite3.Row | None:
     """同文档 + 同参数的最近一次完成检测（提交去重用）。"""
     with conn() as c:
         return c.execute(
@@ -104,14 +105,22 @@ def now() -> str:
 
 
 # ---------- checks ----------
-def create_check(check_id: str, title: str, options: dict,
-                 doc_hash: str = "", params_hash: str = "") -> None:
+def create_check(
+    check_id: str, title: str, options: dict, doc_hash: str = "", params_hash: str = ""
+) -> None:
     with conn() as c:
         c.execute(
             "INSERT INTO checks(id,title,status,options,doc_hash,params_hash,created_at)"
             " VALUES(?,?,?,?,?,?,?)",
-            (check_id, title, "queued", json.dumps(options, ensure_ascii=False),
-             doc_hash, params_hash, now()),
+            (
+                check_id,
+                title,
+                "queued",
+                json.dumps(options, ensure_ascii=False),
+                doc_hash,
+                params_hash,
+                now(),
+            ),
         )
 
 
@@ -123,7 +132,7 @@ def update_check(check_id: str, **fields: Any) -> None:
         c.execute(f"UPDATE checks SET {sets} WHERE id=?", (*fields.values(), check_id))
 
 
-def get_check(check_id: str) -> Optional[sqlite3.Row]:
+def get_check(check_id: str) -> sqlite3.Row | None:
     with conn() as c:
         return c.execute("SELECT * FROM checks WHERE id=?", (check_id,)).fetchone()
 
@@ -142,8 +151,14 @@ def delete_check(check_id: str) -> None:
 
 
 # ---------- library ----------
-def add_doc(title: str, content: str, word_count: int, is_builtin: bool = False,
-            origin: str = "user", source_url: str = "") -> int:
+def add_doc(
+    title: str,
+    content: str,
+    word_count: int,
+    is_builtin: bool = False,
+    origin: str = "user",
+    source_url: str = "",
+) -> int:
     with conn() as c:
         cur = c.execute(
             "INSERT INTO library_docs(title,content,word_count,is_builtin,origin,source_url,created_at)"
@@ -155,12 +170,13 @@ def add_doc(title: str, content: str, word_count: int, is_builtin: bool = False,
 
 def doc_title_exists(title: str) -> bool:
     with conn() as c:
-        return c.execute(
-            "SELECT 1 FROM library_docs WHERE title=? LIMIT 1", (title,)
-        ).fetchone() is not None
+        return (
+            c.execute("SELECT 1 FROM library_docs WHERE title=? LIMIT 1", (title,)).fetchone()
+            is not None
+        )
 
 
-def get_doc_full(doc_id: int) -> Optional[sqlite3.Row]:
+def get_doc_full(doc_id: int) -> sqlite3.Row | None:
     with conn() as c:
         return c.execute(
             "SELECT id,title,content,word_count,is_builtin FROM library_docs WHERE id=?",
@@ -179,7 +195,9 @@ def list_docs() -> list[sqlite3.Row]:
 def all_docs_full() -> list[sqlite3.Row]:
     """语料索引构建用，含全文。"""
     with conn() as c:
-        return c.execute("SELECT id,title,content,word_count,is_builtin FROM library_docs").fetchall()
+        return c.execute(
+            "SELECT id,title,content,word_count,is_builtin FROM library_docs"
+        ).fetchall()
 
 
 def delete_doc(doc_id: int) -> bool:
@@ -208,7 +226,7 @@ def update_job(job_id: str, **fields: Any) -> None:
         c.execute(f"UPDATE crawl_jobs SET {sets} WHERE id=?", (*fields.values(), job_id))
 
 
-def get_job(job_id: str) -> Optional[sqlite3.Row]:
+def get_job(job_id: str) -> sqlite3.Row | None:
     with conn() as c:
         return c.execute("SELECT * FROM crawl_jobs WHERE id=?", (job_id,)).fetchone()
 
@@ -231,6 +249,4 @@ def set_engine_key(key: str, api_key: str, enabled: bool) -> None:
 def get_engine_keys() -> dict[str, dict]:
     with conn() as c:
         rows = c.execute("SELECT * FROM engine_keys").fetchall()
-    return {
-        r["key"]: {"api_key": r["api_key"], "enabled": bool(r["enabled"])} for r in rows
-    }
+    return {r["key"]: {"api_key": r["api_key"], "enabled": bool(r["enabled"])} for r in rows}
