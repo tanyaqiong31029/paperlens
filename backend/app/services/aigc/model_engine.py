@@ -69,7 +69,8 @@ def _ai_prob(pred: list[dict]) -> float:
 def _chunks(text: str, kind: str, limit: int = 380) -> list[tuple[str, int]]:
     """按句聚合成 ≤limit 单位的块，返回 [(块文本, 单位数)]。"""
     out: list[tuple[str, int]] = []
-    cur, cur_n = [], 0
+    cur: list[str] = []
+    cur_n = 0
     for s in segmenter.split_sentences(text):
         if cur_n + s.units > limit and cur:
             out.append((" ".join(cur), cur_n))

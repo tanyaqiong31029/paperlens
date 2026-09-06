@@ -165,7 +165,7 @@ def add_doc(
             " VALUES(?,?,?,?,?,?,?)",
             (title, content, word_count, int(is_builtin), origin, source_url, now()),
         )
-        return int(cur.lastrowid)
+        return int(cur.lastrowid or 0)
 
 
 def doc_title_exists(title: str) -> bool:

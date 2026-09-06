@@ -47,9 +47,8 @@ def export_html(check_id: str) -> str | None:
         )
     web_section = ""
     if web:
-        status_label = {"ok": "已完成", "partial": "部分完成", "error": "失败"}.get(
-            web.get("status"), web.get("status")
-        )
+        status = str(web.get("status") or "")
+        status_label = {"ok": "已完成", "partial": "部分完成", "error": "失败"}.get(status, status)
         web_section = f"""
 <h2>联网全网核查 <small style="color:#64748b;font-size:12px">（{status_label} · 检索源 {html.escape(str(web.get("provider", "")))} · {html.escape(str(web.get("note", "")))}）</small></h2>
 <p>联网重复率：<b style="color:#c2410c">{web.get("web_dup_rate", 0)}%</b>（命中 {len(web.get("hits", []))} 句 / 核查 {web.get("checked", 0)} 句）</p>

@@ -116,7 +116,7 @@ def iter_openalex(lang: str, query: str, target: int, stop, errors: list):
                     "url": url,
                     "origin": f"oa:openalex-{lang}",
                 }
-            cursor = (data.get("meta") or {}).get("next_cursor")
+            cursor = str((data.get("meta") or {}).get("next_cursor") or "")
             if not cursor:
                 return
             fails = 0

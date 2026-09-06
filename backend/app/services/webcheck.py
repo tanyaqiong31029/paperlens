@@ -14,7 +14,9 @@ import re
 import time
 import urllib.parse
 import urllib.request
+from collections.abc import Callable
 from html.parser import HTMLParser
+from typing import Any
 
 from .. import config, db
 from . import segmenter
@@ -207,7 +209,7 @@ def _search_arxiv(q: str) -> list[dict]:
     import xml.etree.ElementTree as ET
 
     ns = "{http://www.w3.org/2005/Atom}"
-    out = []
+    out: list[dict] = []
     try:
         root = ET.fromstring(raw.encode())
     except Exception:  # noqa: BLE001
@@ -258,7 +260,7 @@ def _search_europepmc(q: str) -> list[dict]:
     return out
 
 
-_PROVIDER_FN = {
+_PROVIDER_FN: dict[str, Callable[..., list[dict]]] = {
     "bing_api": _search_bing_api,
     "serpapi": _search_serpapi,
     "bing_html": _search_bing_html,
@@ -314,7 +316,7 @@ def _match_in_page(sent: dict, query: str, page_text: str) -> dict | None:
     q_shingles = segmenter.shingles_norm(sent_norm, kind)
     if not q_shingles:
         return None
-    best = None
+    best: dict[str, Any] | None = None
     for ps in segmenter.split_sentences(page_text):
         if ps.kind != kind or ps.units < 6:
             continue
@@ -414,8 +416,8 @@ def run(sent_results: list[dict], options: dict) -> dict:
 
     total_units = sum(s["units"] for s in sent_results) or 1
     src_list = sorted(sources.values(), key=lambda x: -x["units"])
-    for e in src_list:
-        e["rate"] = round(e["units"] / total_units * 100, 1)
+    for entry in src_list:
+        entry["rate"] = round(entry["units"] / total_units * 100, 1)
 
     used = sorted({h.get("via", "") for h in hits} - {""}) or sorted(
         {chains[k][min(pi_by_kind[k], len(chains[k]) - 1)] for k in chains}
