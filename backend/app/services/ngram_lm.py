@@ -20,9 +20,9 @@ _K = 0.4  # add-k 平滑
 
 class TrigramLM:
     def __init__(self) -> None:
-        self.uni = defaultdict(int)
-        self.bi = defaultdict(int)
-        self.tri = defaultdict(int)
+        self.uni: dict[str, int] = defaultdict(int)
+        self.bi: dict[tuple[str, str], int] = defaultdict(int)
+        self.tri: dict[tuple[str, str, str], int] = defaultdict(int)
         self.total = 0
         self._ready = False
 

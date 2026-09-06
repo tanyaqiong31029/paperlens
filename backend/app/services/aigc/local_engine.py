@@ -307,7 +307,7 @@ def analyze(text: str, lang: str) -> dict:
 
 
 def _paragraph_scores(sent_scores: list[dict]) -> list[dict]:
-    paras: list[dict] = []
+    paras: list[list[dict]] = []
     cur: list[dict] = []
     for s in sent_scores:
         if cur and s["start"] - cur[-1]["end"] > 40:

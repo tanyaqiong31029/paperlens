@@ -14,10 +14,10 @@ jobs:
         with:
           python-version: "3.12"
       - name: 安装依赖
-        run: pip install -r backend/requirements.txt -r backend/requirements-dev.txt
-      - name: 单元测试与 API 冒烟
+        run: pip install -r backend/requirements.txt -r backend/requirements-dev.txt pytest-cov
+      - name: 单元测试与 API 冒烟（含覆盖率报告）
         working-directory: backend
-        run: pytest tests/ -q
+        run: pytest tests/ -q --cov=app --cov-report=term-missing
       - name: AIGC 回归评测（固定评测集 + 质量门槛）
         working-directory: backend
         run: python scripts/eval_aigc.py --min-auroc 0.80 --max-fpr45 0.40
