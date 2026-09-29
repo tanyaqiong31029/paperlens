@@ -1,29 +1,234 @@
 {
-  "description": "AIGC 检测回归评测集（自建小样本，用于 CI 回归监控，非学术基准）",
+  "description": "AIGC 检测回归评测集 v2（42 条自建样本：全文/短文/人工润色AI/跨领域，用于 CI 回归监控，非学术基准）",
   "items": [
-    {"lang": "zh", "label": "human", "text": "说实话这个问题我也琢磨了很久。一开始想从文献综述下手，翻了几篇论文发现写得都挺套路的，就换了个思路。我表哥在物流公司干了八年，过年吃饭聊起来，他们仓库现在分拣还是靠老师傅带新人，系统买了一套又一套，用起来的没几个。我就觉得这里头肯定有事，光靠买软件解决不了人的问题。"},
-    {"lang": "zh", "label": "human", "text": "今天去菜市场，土豆又涨了五毛。摊主老李说进货价就贵了，他也没办法。回来的路上想了想，其实菜价这事跟供应链关系挺大的，但老百姓只关心今天晚饭买什么。写论文的时候总说要贴近实际，可真正的实际就是这些鸡毛蒜皮。"},
-    {"lang": "zh", "label": "human", "text": "实验记录 3 月 14 日：第二批样品烧结失败，温度到了 1150 度的时候炉子报警，估计是热电偶位置偏了。问过王师傅，他说换个位置试试。下周重做，这次把升温速率降到 5 度每分钟看看。"},
-    {"lang": "zh", "label": "human", "text": "致谢：感谢我导师这三年没有放弃我。开题的时候被批得一无是处，中期又推倒重来，最后这段时间天天帮我改句子。还要谢谢师门的兄弟姐妹，还有食堂三楼窗口的阿姨，记得我不要香菜。"},
-    {"lang": "zh", "label": "human", "text": "跟组里同学聊了一晚上，大家普遍的感受是：代码能跑通和论文能讲清楚是两码事。小张的实验数据其实更好看，但他讲不出故事；小李数据一般，图做得漂亮，反而中了。这里面的门道，光看文献是学不来的。"},
-    {"lang": "zh", "label": "human", "text": "看完答辩现场有点触动。有位师兄被问到创新点，愣了半天说了句'我就是想把这个现象搞清楚'。全场安静了几秒，评委反而点头了。回想自己写绪论那些'具有重要意义'，多少有些心虚。"},
-    {"lang": "zh", "label": "ai", "text": "综上所述，社交媒体营销已经成为企业数字化转型的重要组成部分。研究表明，内容质量与用户参与度对品牌传播效果具有重要影响。值得注意的是，短视频平台的兴起为企业带来了新的机遇和挑战。一方面，碎片化传播能够有效提升品牌曝光度；另一方面，算法推荐机制使精准营销成为可能。"},
-    {"lang": "zh", "label": "ai", "text": "深度学习作为人工智能的核心技术，在图像识别、自然语言处理等领域发挥着重要作用。随着算力的不断提升和大规模数据集的日益完善，深度学习模型的性能取得了显著提升，为各行各业的智能化转型奠定了坚实基础。"},
-    {"lang": "zh", "label": "ai", "text": "智慧城市建设是一项系统性工程，需要从顶层设计入手，统筹推进数据治理、平台建设与应用创新。一方面，要完善制度保障，建立健全数据共享机制；另一方面，要强化技术支撑，充分发挥大数据、云计算等新技术的赋能作用，从而全面提升城市治理水平。"},
-    {"lang": "zh", "label": "ai", "text": "首先，本文梳理了国内外相关研究现状；其次，构建了理论分析框架；最后，通过实证检验了研究假设。研究结果表明，数字化转型对企业绩效具有显著的正向影响，且这一影响通过创新能力提升的中介作用实现。本研究具有重要的理论意义和实践价值。"},
-    {"lang": "zh", "label": "ai", "text": "近年来，随着数字经济的蓬勃发展，平台经济日益成为经济增长的新引擎。与此同时，平台垄断、算法歧视等问题也不断涌现，引起了社会各界的广泛关注。因此，如何在鼓励创新与规范发展之间寻求平衡，成为亟待解决的重要课题。"},
-    {"lang": "zh", "label": "ai", "text": "本研究旨在探讨在线学习行为与学习成效之间的关系。研究发现，学习投入在两者之间发挥重要的中介作用。这一发现不仅丰富了在线教育理论体系，也为优化教学设计提供了有力支持，对推动教育数字化转型具有重要意义。"},
-    {"lang": "en", "label": "human", "text": "ok so i finally got the model to run overnight. lost like three hours because of a dtype mismatch, classic. results are not great but at least the loss curve actually goes down now. will rerun with the bigger batch size tomorrow and see if it was just noise. also my office is freezing."},
-    {"lang": "en", "label": "human", "text": "Hey Mark, quick update before the meeting: the vendor sent the wrong cables again, so install is pushed to Thursday. Not thrilled about it but the electrician can still do his part tomorrow morning. I'll bring the site photos so we can argue about the cable tray placement in person. Cheers, Dana"},
-    {"lang": "en", "label": "human", "text": "Lab notes June 3: pipette B is definitely off, calibration due. Ran the assay twice, second run made more sense. Sample 7 looks weird under the scope, maybe contamination? Tossed it. Starting the dilution series in the morning, don't forget to order more tips."},
-    {"lang": "en", "label": "human", "text": "I keep going back and forth on the literature review structure. Part of me wants to organize by method, but half the papers mix methods anyway. My advisor suggested by theme, and honestly the survey gap only shows up if you group them that way. Sleeping on it."},
-    {"lang": "en", "label": "human", "text": "The survey responses were messier than expected. Half the respondents skipped the income question, which is annoying but tells you something. Started cleaning the data tonight, found three duplicates and one respondent who apparently took the survey four times.Tomorrow: actual analysis, maybe."},
-    {"lang": "en", "label": "human", "text": "Field day at the site. The sensor array survived the storm, which is a small miracle. Mud everywhere. Readings from station 4 look off again, could be the battery. Swapped it with the spare from station 6. Talked to the farmer nearby, he says the creek floods about this deep every spring, which matches the old records."},
-    {"lang": "en", "label": "ai", "text": "In conclusion, artificial intelligence plays a crucial role in modern healthcare. Moreover, it is important to note that machine learning algorithms can effectively improve diagnostic accuracy. Furthermore, these technologies pave the way for personalized treatment approaches, fostering significant impact across the medical landscape."},
-    {"lang": "en", "label": "ai", "text": "Digital transformation has become a strategic imperative for organizations across industries. Furthermore, successful transformations require a comprehensive understanding of both technology and organizational culture. Additionally, leveraging robust data infrastructure can foster innovation and underscore the importance of agile leadership in today's ever-evolving business landscape."},
-    {"lang": "en", "label": "ai", "text": "It is important to note that climate change represents a multifaceted challenge that demands holistic solutions. Moreover, renewable energy technologies play a vital role in reducing carbon emissions. Consequently, policymakers must navigate the complex interplay between economic growth and environmental sustainability to pave the way for a sustainable future."},
-    {"lang": "en", "label": "ai", "text": "This study delves into the intricate relationship between social media usage and consumer behavior. Furthermore, our comprehensive analysis underscores the significant impact of personalized content on purchasing decisions. Additionally, the findings pave the way for marketers to leverage cutting-edge strategies in an ever-evolving digital landscape."},
-    {"lang": "en", "label": "ai", "text": "Urban mobility stands at a paradigm shift driven by cutting-edge technologies. Moreover, integrated public transit systems play a crucial role in fostering sustainable cities. It is worth noting that robust policy frameworks can seamlessly bridge the gap between innovation and equity, ensuring a holistic transition for all stakeholders."},
-    {"lang": "en", "label": "ai", "text": "In summary, remote work has fundamentally reshaped the contemporary workplace. Additionally, organizations must leverage comprehensive communication strategies to maintain productivity. Furthermore, it is essential to navigate the challenges of hybrid arrangements, fostering a seamless integration of in-person and virtual collaboration in today's dynamic environment."}
-  ]
+    {
+      "lang": "zh",
+      "label": "human",
+      "text": "说实话这个问题我也琢磨了很久。一开始想从文献综述下手，翻了几篇论文发现写得都挺套路的，就换了个思路。我表哥在物流公司干了八年，过年吃饭聊起来，他们仓库现在分拣还是靠老师傅带新人，系统买了一套又一套，用起来的没几个。我就觉得这里头肯定有事，光靠买软件解决不了人的问题。"
+    },
+    {
+      "lang": "zh",
+      "label": "human",
+      "text": "今天去菜市场，土豆又涨了五毛。摊主老李说进货价就贵了，他也没办法。回来的路上想了想，其实菜价这事跟供应链关系挺大的，但老百姓只关心今天晚饭买什么。写论文的时候总说要贴近实际，可真正的实际就是这些鸡毛蒜皮。"
+    },
+    {
+      "lang": "zh",
+      "label": "human",
+      "text": "实验记录 3 月 14 日：第二批样品烧结失败，温度到了 1150 度的时候炉子报警，估计是热电偶位置偏了。问过王师傅，他说换个位置试试。下周重做，这次把升温速率降到 5 度每分钟看看。"
+    },
+    {
+      "lang": "zh",
+      "label": "human",
+      "text": "致谢：感谢我导师这三年没有放弃我。开题的时候被批得一无是处，中期又推倒重来，最后这段时间天天帮我改句子。还要谢谢师门的兄弟姐妹，还有食堂三楼窗口的阿姨，记得我不要香菜。"
+    },
+    {
+      "lang": "zh",
+      "label": "human",
+      "text": "跟组里同学聊了一晚上，大家普遍的感受是：代码能跑通和论文能讲清楚是两码事。小张的实验数据其实更好看，但他讲不出故事；小李数据一般，图做得漂亮，反而中了。这里面的门道，光看文献是学不来的。"
+    },
+    {
+      "lang": "zh",
+      "label": "human",
+      "text": "看完答辩现场有点触动。有位师兄被问到创新点，愣了半天说了句'我就是想把这个现象搞清楚'。全场安静了几秒，评委反而点头了。回想自己写绪论那些'具有重要意义'，多少有些心虚。"
+    },
+    {
+      "lang": "zh",
+      "label": "ai",
+      "text": "综上所述，社交媒体营销已经成为企业数字化转型的重要组成部分。研究表明，内容质量与用户参与度对品牌传播效果具有重要影响。值得注意的是，短视频平台的兴起为企业带来了新的机遇和挑战。一方面，碎片化传播能够有效提升品牌曝光度；另一方面，算法推荐机制使精准营销成为可能。"
+    },
+    {
+      "lang": "zh",
+      "label": "ai",
+      "text": "深度学习作为人工智能的核心技术，在图像识别、自然语言处理等领域发挥着重要作用。随着算力的不断提升和大规模数据集的日益完善，深度学习模型的性能取得了显著提升，为各行各业的智能化转型奠定了坚实基础。"
+    },
+    {
+      "lang": "zh",
+      "label": "ai",
+      "text": "智慧城市建设是一项系统性工程，需要从顶层设计入手，统筹推进数据治理、平台建设与应用创新。一方面，要完善制度保障，建立健全数据共享机制；另一方面，要强化技术支撑，充分发挥大数据、云计算等新技术的赋能作用，从而全面提升城市治理水平。"
+    },
+    {
+      "lang": "zh",
+      "label": "ai",
+      "text": "首先，本文梳理了国内外相关研究现状；其次，构建了理论分析框架；最后，通过实证检验了研究假设。研究结果表明，数字化转型对企业绩效具有显著的正向影响，且这一影响通过创新能力提升的中介作用实现。本研究具有重要的理论意义和实践价值。"
+    },
+    {
+      "lang": "zh",
+      "label": "ai",
+      "text": "近年来，随着数字经济的蓬勃发展，平台经济日益成为经济增长的新引擎。与此同时，平台垄断、算法歧视等问题也不断涌现，引起了社会各界的广泛关注。因此，如何在鼓励创新与规范发展之间寻求平衡，成为亟待解决的重要课题。"
+    },
+    {
+      "lang": "zh",
+      "label": "ai",
+      "text": "本研究旨在探讨在线学习行为与学习成效之间的关系。研究发现，学习投入在两者之间发挥重要的中介作用。这一发现不仅丰富了在线教育理论体系，也为优化教学设计提供了有力支持，对推动教育数字化转型具有重要意义。"
+    },
+    {
+      "lang": "en",
+      "label": "human",
+      "text": "ok so i finally got the model to run overnight. lost like three hours because of a dtype mismatch, classic. results are not great but at least the loss curve actually goes down now. will rerun with the bigger batch size tomorrow and see if it was just noise. also my office is freezing."
+    },
+    {
+      "lang": "en",
+      "label": "human",
+      "text": "Hey Mark, quick update before the meeting: the vendor sent the wrong cables again, so install is pushed to Thursday. Not thrilled about it but the electrician can still do his part tomorrow morning. I'll bring the site photos so we can argue about the cable tray placement in person. Cheers, Dana"
+    },
+    {
+      "lang": "en",
+      "label": "human",
+      "text": "Lab notes June 3: pipette B is definitely off, calibration due. Ran the assay twice, second run made more sense. Sample 7 looks weird under the scope, maybe contamination? Tossed it. Starting the dilution series in the morning, don't forget to order more tips."
+    },
+    {
+      "lang": "en",
+      "label": "human",
+      "text": "I keep going back and forth on the literature review structure. Part of me wants to organize by method, but half the papers mix methods anyway. My advisor suggested by theme, and honestly the survey gap only shows up if you group them that way. Sleeping on it."
+    },
+    {
+      "lang": "en",
+      "label": "human",
+      "text": "The survey responses were messier than expected. Half the respondents skipped the income question, which is annoying but tells you something. Started cleaning the data tonight, found three duplicates and one respondent who apparently took the survey four times.Tomorrow: actual analysis, maybe."
+    },
+    {
+      "lang": "en",
+      "label": "human",
+      "text": "Field day at the site. The sensor array survived the storm, which is a small miracle. Mud everywhere. Readings from station 4 look off again, could be the battery. Swapped it with the spare from station 6. Talked to the farmer nearby, he says the creek floods about this deep every spring, which matches the old records."
+    },
+    {
+      "lang": "en",
+      "label": "ai",
+      "text": "In conclusion, artificial intelligence plays a crucial role in modern healthcare. Moreover, it is important to note that machine learning algorithms can effectively improve diagnostic accuracy. Furthermore, these technologies pave the way for personalized treatment approaches, fostering significant impact across the medical landscape."
+    },
+    {
+      "lang": "en",
+      "label": "ai",
+      "text": "Digital transformation has become a strategic imperative for organizations across industries. Furthermore, successful transformations require a comprehensive understanding of both technology and organizational culture. Additionally, leveraging robust data infrastructure can foster innovation and underscore the importance of agile leadership in today's ever-evolving business landscape."
+    },
+    {
+      "lang": "en",
+      "label": "ai",
+      "text": "It is important to note that climate change represents a multifaceted challenge that demands holistic solutions. Moreover, renewable energy technologies play a vital role in reducing carbon emissions. Consequently, policymakers must navigate the complex interplay between economic growth and environmental sustainability to pave the way for a sustainable future."
+    },
+    {
+      "lang": "en",
+      "label": "ai",
+      "text": "This study delves into the intricate relationship between social media usage and consumer behavior. Furthermore, our comprehensive analysis underscores the significant impact of personalized content on purchasing decisions. Additionally, the findings pave the way for marketers to leverage cutting-edge strategies in an ever-evolving digital landscape."
+    },
+    {
+      "lang": "en",
+      "label": "ai",
+      "text": "Urban mobility stands at a paradigm shift driven by cutting-edge technologies. Moreover, integrated public transit systems play a crucial role in fostering sustainable cities. It is worth noting that robust policy frameworks can seamlessly bridge the gap between innovation and equity, ensuring a holistic transition for all stakeholders."
+    },
+    {
+      "lang": "en",
+      "label": "ai",
+      "text": "In summary, remote work has fundamentally reshaped the contemporary workplace. Additionally, organizations must leverage comprehensive communication strategies to maintain productivity. Furthermore, it is essential to navigate the challenges of hybrid arrangements, fostering a seamless integration of in-person and virtual collaboration in today's dynamic environment."
+    },
+    {
+      "lang": "zh",
+      "label": "human",
+      "kind": "short",
+      "text": "张老师：明早八点半实验室例会改到十点，设备周三才到。麻烦把上周的损耗表带一下，纸质版就行。收到回个消息。"
+    },
+    {
+      "lang": "zh",
+      "label": "human",
+      "kind": "short",
+      "text": "翻出大学毕业的合照，一数居然十年了。那时候觉得迷茫的事，现在看大多有了答案，也有一些答案后来被自己推翻了。"
+    },
+    {
+      "lang": "zh",
+      "label": "ai",
+      "kind": "short",
+      "text": "值得注意的是，数字化转型为企业带来了全方位的机遇。综上所述，企业应当积极拥抱新技术，助力实现高质量发展。"
+    },
+    {
+      "lang": "zh",
+      "label": "ai",
+      "kind": "short",
+      "text": "随着人工智能技术的不断发展，其在教育领域的应用日益广泛。研究表明，个性化学习能够有效提升学习成效，具有重要的实践意义。"
+    },
+    {
+      "lang": "zh",
+      "label": "human",
+      "kind": "polished-ai",
+      "text": "关于这份报告我想补充一点。之前的分析框架是没错，但有个地方说'赋能基层治理'，说得太大了，其实就是帮社区省了填表的时间。数据那块没问题，就是结论建议写得保守了，可以再直接一点。"
+    },
+    {
+      "lang": "zh",
+      "label": "human",
+      "kind": "cross-domain",
+      "text": "SOLAS 公约 1974 年文本及其历次修正案构成了国际航行船舶安全标准的主体框架。2024 年综合版对第Ⅱ-1 章做了结构调整，船级社审图时要同时对照原条款和补遗，避免引用过期版本。"
+    },
+    {
+      "lang": "zh",
+      "label": "ai",
+      "kind": "cross-domain",
+      "text": "《国际海上人命安全公约》作为国际航运安全的核心制度框架，对船舶构造、设备与操作提出了系统性要求。值得注意的是，2024 年综合版的发布进一步强化了规则的统一性，为全球海事治理奠定了坚实基础。"
+    },
+    {
+      "lang": "zh",
+      "label": "human",
+      "kind": "long",
+      "text": "先把结论写在前面：这批数据不能用。原因有三，一是采样时段集中在早高峰，代表性不够；二是仪器 B 在第 40 分钟之后漂移明显，校准记录也缺；三是原始日志里有两段时间戳重复。我不是没想过补救，比如只用后半段，但那样样本量就撑不起结论了。所以最稳妥的做法还是下周重测，顺便把日志服务的时间同步修好。这事拖不得，拖到月底数据又得重采一遍。"
+    },
+    {
+      "lang": "zh",
+      "label": "ai",
+      "kind": "long",
+      "text": "智慧交通系统是解决城市拥堵问题的重要途径。一方面，通过大数据分析可以实时优化信号灯配时，提升道路通行效率；另一方面，车路协同技术为自动驾驶提供了有力支撑。综上所述，应当加快智慧交通基础设施建设，推动多源数据融合，从而全面提升城市交通治理的现代化水平。"
+    },
+    {
+      "lang": "en",
+      "label": "human",
+      "kind": "short",
+      "text": "Hi team — pushing the demo to Friday. The API contract with the payment vendor changed again (third time this month), and I'd rather show the new flow once than explain it twice. Nothing needed from you; just brace for a longer changelog."
+    },
+    {
+      "lang": "en",
+      "label": "human",
+      "kind": "short",
+      "text": "Read three papers on drift detection, still unconvinced. Two reuse the same dataset, and the third's baseline is suspiciously weak. Maybe the approach is fine and the evaluation culture is the problem."
+    },
+    {
+      "lang": "en",
+      "label": "ai",
+      "kind": "short",
+      "text": "In today's rapidly evolving technological landscape, effective communication plays a pivotal role. Furthermore, organizations must leverage robust strategies to foster collaboration and drive innovation."
+    },
+    {
+      "lang": "en",
+      "label": "ai",
+      "kind": "short",
+      "text": "It is important to note that sustainable practices underscore a company's commitment to social responsibility. Moreover, such initiatives pave the way for long-term growth and holistic success."
+    },
+    {
+      "lang": "en",
+      "label": "human",
+      "kind": "polished-ai",
+      "text": "Reviewer 2 has a point about the framing. We wrote 'leverages a robust pipeline', which is consultant-speak for 'we wrote a script and it works'. I've toned that down and added the failure modes we actually hit — three weeks of silent NaNs, if anyone asks."
+    },
+    {
+      "lang": "en",
+      "label": "human",
+      "kind": "cross-domain",
+      "text": "Under SOLAS Chapter V, the master has final authority over deviations from the route for safety reasons. In practice, that authority collides with charterparty speed clauses more often than owners admit. The 2026 supplement doesn't resolve it; it just documents the VDR requirements more precisely."
+    },
+    {
+      "lang": "en",
+      "label": "ai",
+      "kind": "cross-domain",
+      "text": "The International Convention for the Safety of Life at Sea establishes a comprehensive framework for maritime safety. Furthermore, the 2024 consolidated edition underscores the importance of harmonized standards, paving the way for enhanced global compliance and robust governance."
+    },
+    {
+      "lang": "en",
+      "label": "human",
+      "kind": "long",
+      "text": "Data collection ended in chaos, which I should have expected. The boat we chartered lost GPS signal twice in the harbor, so half the transects have gaps, and the backup logger recorded at the wrong interval — 5 seconds instead of 1. I could interpolate, but interpolating current speed defeats the purpose of measuring current speed. Best case we redo two lines on Thursday when the tide is right. Worst case we redesign the mounting and wait for the next survey window. Either way the report is late, and I'd rather explain a delay than defend fabricated numbers."
+    },
+    {
+      "lang": "en",
+      "label": "ai",
+      "kind": "long",
+      "text": "Maritime autonomous surface ships represent a transformative advancement in the shipping industry. Moreover, their integration requires comprehensive regulatory frameworks that address both operational safety and environmental protection. Additionally, stakeholders must collaborate to develop robust cybersecurity protocols, thereby ensuring that autonomous navigation systems operate seamlessly within existing traffic patterns. In conclusion, proactive governance will foster innovation while safeguarding the maritime ecosystem."
+    }
+  ],
+  "version": 2
 }

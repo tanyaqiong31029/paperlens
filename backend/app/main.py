@@ -9,6 +9,9 @@
 import asyncio
 import json
 import os
+import threading
+import time
+from collections import deque
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -59,21 +62,52 @@ if _allow_origins:
     )
 
 
+_auth_failures: dict[str, deque] = {}  # IP -> 失败时间戳（10 分钟窗口）
+_auth_bans: dict[str, float] = {}  # IP -> 封禁截止时间
+
+
 @app.middleware("http")
 async def admin_guard(request: Request, call_next):
     """设置 PAPERLENS_ADMIN_TOKEN 后，除健康/统计/引擎列表外全部要求令牌。
 
     令牌只接受请求头 X-Admin-Token（不提供 query-string 方式，避免令牌进入
-    浏览器历史、代理日志与 Referer）。
+    浏览器历史、代理日志与 Referer）。连续失败达 AUTH_FAIL_LIMIT 次的 IP
+    会被临时封禁 AUTH_BAN_SECONDS 秒（防暴力尝试），成功认证即清零。
     """
     if config.ADMIN_TOKEN:
         p = request.url.path
-        if (
-            p.startswith("/api")
-            and p not in ("/api/health", "/api/stats", "/api/engines")
-            and request.headers.get("x-admin-token") != config.ADMIN_TOKEN
-        ):
-            return JSONResponse({"detail": "需要管理员令牌（X-Admin-Token）"}, status_code=401)
+        if p.startswith("/api") and p not in ("/api/health", "/api/stats", "/api/engines"):
+            client = request.client
+            ip = client.host if client else "unknown"
+            now = time.time()
+
+            ban_until = _auth_bans.get(ip)
+            if ban_until is not None and now < ban_until:
+                retry = int(ban_until - now) + 1
+                return JSONResponse(
+                    {"detail": f"令牌失败次数过多，已临时封禁，请 {retry} 秒后重试"},
+                    status_code=429,
+                    headers={"Retry-After": str(retry)},
+                )
+
+            if request.headers.get("x-admin-token") == config.ADMIN_TOKEN:
+                _auth_failures.pop(ip, None)
+                _auth_bans.pop(ip, None)
+            else:
+                dq = _auth_failures.setdefault(ip, deque())
+                while dq and now - dq[0] > 600:
+                    dq.popleft()
+                dq.append(now)
+                if len(dq) >= config.AUTH_FAIL_LIMIT:
+                    _auth_bans[ip] = now + config.AUTH_BAN_SECONDS
+                    _auth_failures.pop(ip, None)
+                    audit.log_event("auth_banned", ip=ip)
+                    return JSONResponse(
+                        {"detail": f"令牌连续失败 {config.AUTH_FAIL_LIMIT} 次，已临时封禁"},
+                        status_code=429,
+                        headers={"Retry-After": str(config.AUTH_BAN_SECONDS)},
+                    )
+                return JSONResponse({"detail": "需要管理员令牌（X-Admin-Token）"}, status_code=401)
     return await call_next(request)
 
 
@@ -128,7 +162,56 @@ class BodySizeLimitMiddleware:
         await self.app(scope, buffered_receive, send)
 
 
+class RateLimitMiddleware:
+    """按客户端 IP 的滑动窗口限流（仅 /api/*），防资源耗尽与暴力尝试。"""
+
+    def __init__(self, app, per_minute: int):
+        import time
+        from collections import deque
+
+        self.app = app
+        self.per_minute = per_minute
+        self._time = time
+        self._deque = deque
+        self._hits: dict = {}
+        self._lock = threading.Lock()
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http" or not scope.get("path", "").startswith("/api"):
+            await self.app(scope, receive, send)
+            return
+        client = scope.get("client") or ("unknown", 0)
+        ip = client[0]
+        now = self._time.time()
+        with self._lock:
+            dq = self._hits.setdefault(ip, self._deque())
+            while dq and now - dq[0] > 60:
+                dq.popleft()
+            if len(dq) >= self.per_minute:
+                retry = max(1, int(60 - (now - dq[0])) + 1)
+                await send(
+                    {
+                        "type": "http.response.start",
+                        "status": 429,
+                        "headers": [
+                            (b"content-type", b"application/json; charset=utf-8"),
+                            (b"retry-after", str(retry).encode()),
+                        ],
+                    }
+                )
+                await send(
+                    {
+                        "type": "http.response.body",
+                        "body": '{"detail":"请求过于频繁，请稍后再试"}'.encode(),
+                    }
+                )
+                return
+            dq.append(now)
+        await self.app(scope, receive, send)
+
+
 app.add_middleware(BodySizeLimitMiddleware, max_bytes=config.MAX_BODY_BYTES)
+app.add_middleware(RateLimitMiddleware, per_minute=config.RATE_LIMIT_PER_MIN)
 # 响应压缩：报告 JSON/HTML 文本压缩比约 5:1，显著降低大报告的传输量
 app.add_middleware(GZipMiddleware, minimum_size=1024)
 
@@ -225,9 +308,12 @@ async def create_check(
         "web_check_count": max(3, min(30, web_check_count)),
         "title": display_title,
     }
-    check_id = checker.submit(
-        display_title, content, options, doc_hash=doc_hash, params_hash=params_hash
-    )
+    try:
+        check_id = checker.submit(
+            display_title, content, options, doc_hash=doc_hash, params_hash=params_hash
+        )
+    except checker.QueueFullError as e:
+        raise HTTPException(429, str(e)) from e
     audit.log_event(
         "check_submit",
         check_id=check_id,
@@ -321,6 +407,8 @@ async def add_library_doc(
             raise HTTPException(400, str(e)) from e
     elif text:
         content = text
+    if len(content) > config.MAX_TEXT_CHARS:
+        raise HTTPException(413, f"文档正文超过 {config.MAX_TEXT_CHARS} 字符上限")
     if len(content.strip()) < 20:
         raise HTTPException(400, "文档内容过短")
     doc_title = (

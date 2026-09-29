@@ -8,11 +8,15 @@ on:
 jobs:
   backend:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.13"]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: ${{ matrix.python-version }}
       - name: 安装依赖
         run: pip install -r backend/requirements.txt -r backend/requirements-dev.txt pytest-cov
       - name: 单元测试与 API 冒烟（含覆盖率报告）
@@ -21,6 +25,18 @@ jobs:
       - name: AIGC 回归评测（固定评测集 + 质量门槛）
         working-directory: backend
         run: python scripts/eval_aigc.py --min-auroc 0.80 --max-fpr45 0.40
+
+  pip-audit:
+    name: pip-audit（后端依赖已知漏洞）
+    runs-on: ubuntu-latest
+    continue-on-error: true   # 暂不阻塞合流，结果作为依赖周报输入
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install pip-audit
+      - run: pip-audit -r backend/requirements.txt -r backend/requirements-dev.txt
 
   frontend:
     runs-on: ubuntu-latest

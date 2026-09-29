@@ -26,6 +26,12 @@ ADMIN_TOKEN = os.environ.get("PAPERLENS_ADMIN_TOKEN", "").strip()
 MAX_BODY_BYTES = int(os.environ.get("PAPERLENS_MAX_BODY_BYTES", str(40 * 1024 * 1024)))
 RETENTION_DAYS = int(os.environ.get("PAPERLENS_RETENTION_DAYS", "0"))  # 0=永久保留
 
+# ---- 防滥用（公网/局域网开放时建议保持默认或收紧）----
+RATE_LIMIT_PER_MIN = int(os.environ.get("PAPERLENS_RATE_LIMIT", "300"))  # 每 IP 每分钟 /api 请求数
+AUTH_FAIL_LIMIT = int(os.environ.get("PAPERLENS_FAIL_LIMIT", "5"))  # 令牌连续失败次数
+AUTH_BAN_SECONDS = int(os.environ.get("PAPERLENS_BAN_SECONDS", "900"))  # 触发后的临时封禁时长
+MAX_QUEUE_WAIT = int(os.environ.get("PAPERLENS_MAX_QUEUE_WAIT", "30"))  # 等待队列上限（超过 429）
+
 # ---------- 查重参数 ----------
 # 中文按"字"为最小单位，英文按"词"。指纹 shingle 长度参考开源
 # paper_checking_system 的连续串阈值（13 字左右）拆成两级：

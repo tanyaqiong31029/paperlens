@@ -51,24 +51,48 @@ export default function Report() {
     load()
   }, [load])
 
-  // 检测中：SSE 订阅进度（断连自动回退轮询）
+  // 检测中：SSE 订阅进度（fetch 流式，可携带 X-Admin-Token；断连回退轮询）
   useEffect(() => {
     if (!data || data.status === 'done' || data.status === 'error') return
+    const ctrl = new AbortController()
     let fallback: number | undefined
-    const es = new EventSource(`/api/checks/${data.id}/events`)
-    es.onmessage = ev => {
-      try {
-        const p = JSON.parse(ev.data)
-        setProgress({ stage: p.stage, pct: p.pct ?? 0 })
-        if (p.status === 'error') { es.close(); load() }
-      } catch { /* 忽略格式异常 */ }
-    }
-    es.addEventListener('end', () => { es.close(); load() })
-    es.onerror = () => {
-      es.close()
-      fallback = window.setTimeout(load, 1200)
-    }
-    return () => { es.close(); if (fallback) clearTimeout(fallback) }
+
+    apiFetch(`/api/checks/${data.id}/events`, { signal: ctrl.signal })
+      .then(async res => {
+        if (!res.ok || !res.body) { throw new Error(String(res.status)) }
+        const reader = res.body.getReader()
+        const decoder = new TextDecoder()
+        let buf = ''
+        for (;;) {
+          const { done, value } = await reader.read()
+          if (done) break
+          buf += decoder.decode(value, { stream: true })
+          let idx: number
+          while ((idx = buf.indexOf('\n\n')) !== -1) {
+            const chunk = buf.slice(0, idx)
+            buf = buf.slice(idx + 2)
+            if (chunk.startsWith('event: end')) {
+              ctrl.abort()
+              load()
+              return
+            }
+            if (chunk.startsWith('data: ')) {
+              try {
+                const p = JSON.parse(chunk.slice(6))
+                setProgress({ stage: p.stage, pct: p.pct ?? 0 })
+                if (p.status === 'error') { ctrl.abort(); load(); return }
+              } catch { /* 忽略格式异常 */ }
+            }
+          }
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        // 流结束但未到终态（网络中断/令牌问题）→ 轮询兜底
+        fallback = window.setTimeout(load, 1200)
+      })
+
+    return () => { ctrl.abort(); if (fallback) clearTimeout(fallback) }
   }, [data, load])
 
   if (error) {
