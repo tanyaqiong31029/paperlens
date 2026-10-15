@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Wand2, Copy, Download, ArrowRight, ShieldAlert } from 'lucide-react'
-import { api } from '../api'
+import { apiFetch } from '../api'
 
 interface ReduceResult {
   mode: string
@@ -73,7 +73,7 @@ export default function Reduce() {
     setBusy(true)
     setResult(null)
     try {
-      const res = await fetch('/api/reduce', {
+      const res = await apiFetch('/api/reduce', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text, mode }),

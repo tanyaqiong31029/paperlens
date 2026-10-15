@@ -65,7 +65,7 @@ bash start.sh          # 默认 http://127.0.0.1:8765 —— 仅本机可访问
 ```
 
 - 后端：Python 3.10+（FastAPI + SQLite，无重型依赖）
-- 前端：Node 18+（React 18 + Vite 5 + Tailwind CSS 4）
+- 前端：Node 18+（React 18 + Vite 6 + Tailwind CSS 4）
 
 开发模式：
 

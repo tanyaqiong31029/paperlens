@@ -291,10 +291,15 @@ def start_job(source: str, query: str, target: int) -> str:
         if _active_jobs >= MAX_CONCURRENT_CRAWLS:
             raise RuntimeError(f"已有 {MAX_CONCURRENT_CRAWLS} 个采集任务在运行，请等待完成或先停止")
         _active_jobs += 1
-    target = max(20, min(int(target), SOURCES[source]["max_target"]))
-    job_id = uuid.uuid4().hex[:10]
-    db.create_job(job_id, source, query.strip(), target)
-    threading.Thread(target=_run_job, args=(job_id,), daemon=True).start()
+    try:
+        target = max(20, min(int(target), SOURCES[source]["max_target"]))
+        job_id = uuid.uuid4().hex[:10]
+        db.create_job(job_id, source, query.strip(), target)
+        threading.Thread(target=_run_job, args=(job_id,), daemon=True).start()
+    except BaseException:
+        # 建任务/起线程失败时归还并发名额，否则名额永久泄漏
+        _release_job()
+        raise
     return job_id
 
 
@@ -323,9 +328,10 @@ def _run_job(job_id: str) -> None:
         for doc in adapter(query, target, should_stop, errors):
             fetched += 1
             try:
-                if not db.doc_title_exists(doc["title"]):
+                title = doc["title"][:200]  # 与入库截断一致，否则长标题的去重永远不命中
+                if not db.doc_title_exists(title):
                     did = db.add_doc(
-                        doc["title"][:200],
+                        title,
                         doc["content"],
                         len(doc["content"].replace(" ", "").replace("\n", "")),
                         is_builtin=False,

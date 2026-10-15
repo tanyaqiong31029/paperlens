@@ -7,6 +7,7 @@
 """
 
 import asyncio
+import hmac
 import json
 import os
 import threading
@@ -30,6 +31,10 @@ from .services.exporter import export_html
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     db.init_db()
+    # 必须在接收任何请求前执行：此时内存队列/采集线程都为空，非终态记录均为上次进程遗留
+    n_checks, n_jobs = db.recover_interrupted()
+    if n_checks or n_jobs:
+        print(f"[paperlens] 启动收尾：{n_checks} 条检测、{n_jobs} 个采集任务因重启标记为中断")
     _seed_corpus_if_empty()
     # 索引快照持久化：哈希匹配则亚秒加载，否则全量重建并落盘
     _ = CORPUS.load_or_rebuild()
@@ -90,7 +95,12 @@ async def admin_guard(request: Request, call_next):
                     headers={"Retry-After": str(retry)},
                 )
 
-            if request.headers.get("x-admin-token") == config.ADMIN_TOKEN:
+            supplied = request.headers.get("x-admin-token")
+            if supplied is None:
+                # 未携带令牌（如未登录页面的轮询）不是猜测令牌，不计入失败次数，
+                # 否则用户还没来得及输入令牌，IP 就已被封禁
+                return JSONResponse({"detail": "需要管理员令牌（X-Admin-Token）"}, status_code=401)
+            if hmac.compare_digest(supplied.encode(), config.ADMIN_TOKEN.encode()):
                 _auth_failures.pop(ip, None)
                 _auth_bans.pop(ip, None)
             else:
@@ -459,22 +469,39 @@ def crawl_sources():
     return crawler.sources_info()
 
 
+async def _json_object(request: Request) -> dict:
+    """读取 JSON 请求体并要求是对象；格式错误/非对象一律 400（而非 500）。"""
+    try:
+        body = await request.json()
+    except ValueError as e:
+        raise HTTPException(400, "请求体必须是合法 JSON") from e
+    if not isinstance(body, dict):
+        raise HTTPException(400, "请求体必须是 JSON 对象")
+    return body
+
+
 @app.post("/api/crawl/jobs")
 async def start_crawl(request: Request):
-    body = await request.json()
+    body = await _json_object(request)
+    raw_target = body.get("target", 200)
+    # bool 是 int 子类，需单独排除；字符串数字（如 "200"）仍兼容
+    if isinstance(raw_target, bool) or not isinstance(raw_target, int | str):
+        raise HTTPException(400, "target 必须是整数")
+    try:
+        target = int(raw_target)
+    except ValueError as e:
+        raise HTTPException(400, "target 必须是整数") from e
     try:
         job_id = crawler.start_job(
             source=str(body.get("source", "")),
             query=str(body.get("query", "") or ""),
-            target=int(body.get("target", 200)),
+            target=target,
         )
     except ValueError as e:
         raise HTTPException(400, str(e)) from e
     except RuntimeError as e:
         raise HTTPException(429, str(e)) from e
-    audit.log_event(
-        "crawl_start", source=str(body.get("source", "")), target=body.get("target", 200)
-    )
+    audit.log_event("crawl_start", source=str(body.get("source", "")), target=target)
     return {"job_id": job_id}
 
 
@@ -499,7 +526,7 @@ from .services import rewriter  # noqa: E402
 
 @app.post("/api/reduce")
 async def reduce_text(request: Request):
-    body = await request.json()
+    body = await _json_object(request)
     text = str(body.get("text", ""))
     mode = str(body.get("mode", "both"))
     if mode not in ("dedup", "humanize", "both"):
@@ -516,7 +543,24 @@ if DIST.exists():
 
     @app.get("/{path:path}")
     def spa(path: str):
-        candidate = DIST / path
-        if path and candidate.is_file():
-            return FileResponse(candidate)
-        return FileResponse(DIST / "index.html")
+        return FileResponse(_spa_file(DIST, path))
+
+
+def _spa_file(dist: Path, path: str) -> Path:
+    """SPA 兜底路由的文件解析：只允许返回 dist 目录内的真实文件，其余回落 index.html。
+
+    path 来自 URL，可能是绝对路径（`//etc/passwd` → "/etc/passwd"，`dist / "/etc/passwd"`
+    会直接丢弃 dist）或含 `..`（`%2F..%2F` 解码后），必须 resolve 后做包含校验，
+    否则可绕过管理员令牌读取 data/app.db 等任意文件。
+    """
+    root = dist.resolve()
+    index = root / "index.html"
+    if not path:
+        return index
+    try:
+        candidate = (root / path).resolve()
+    except (OSError, ValueError):
+        return index
+    if candidate.is_relative_to(root) and candidate.is_file():
+        return candidate
+    return index

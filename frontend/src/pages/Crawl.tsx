@@ -28,7 +28,14 @@ export default function Crawl() {
     const t = setInterval(() => {
       api.crawlJobs().then(setJobs).catch(() => {})
     }, 2500)
-    return () => clearInterval(t)
+    // 401（需要令牌/令牌失效）后停止轮询：继续空转只会刷 401；
+    // 令牌对话框保存后会整页刷新，轮询随之以新令牌重新开始
+    const onUnauthorized = () => clearInterval(t)
+    window.addEventListener('paperlens:unauthorized', onUnauthorized)
+    return () => {
+      clearInterval(t)
+      window.removeEventListener('paperlens:unauthorized', onUnauthorized)
+    }
   }, [])
 
   const start = async (s: CrawlSource) => {

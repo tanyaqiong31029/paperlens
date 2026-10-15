@@ -76,6 +76,27 @@ def purge_old_checks(days: int) -> int:
         return cur.rowcount
 
 
+def recover_interrupted(message: str = "服务重启，任务已中断，请重新提交") -> tuple[int, int]:
+    """启动时收尾：上次进程遗留的非终态任务已无执行者，统一标记为 error。
+
+    检测队列与采集线程都只存在于内存中，进程重启后 queued/running 的检测、
+    running/stop_requested 的采集任务不会再推进；不处理会让前端永远转圈。
+    返回 (检测记录数, 采集任务数)。
+    """
+    with conn() as c:
+        checks = c.execute(
+            "UPDATE checks SET status='error', error=?, finished_at=?"
+            " WHERE status IN ('queued','running')",
+            (message, now()),
+        ).rowcount
+        jobs = c.execute(
+            "UPDATE crawl_jobs SET status='error', message=?, updated_at=?"
+            " WHERE status IN ('running','stop_requested')",
+            (message, now()),
+        ).rowcount
+    return checks, jobs
+
+
 def find_check_by_hash(doc_hash: str, params_hash: str) -> sqlite3.Row | None:
     """同文档 + 同参数的最近一次完成检测（提交去重用）。"""
     with conn() as c:
