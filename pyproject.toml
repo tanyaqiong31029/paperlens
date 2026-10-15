@@ -18,7 +18,7 @@ known-first-party = ["app"]
 # FastAPI 依赖注入惯用法：File()/Depends() 出现在参数默认值中
 "backend/app/**" = ["B008"]
 
-# ---- 类型检查（宽松起步档：当前存量 15 个错误，收敛后再纳入 CI）----
+# ---- 类型检查（宽松档；已纳入 CI：.github/workflows/tests.yml 运行 `mypy .`）----
 [tool.mypy]
 python_version = "3.10"
 files = ["backend"]
